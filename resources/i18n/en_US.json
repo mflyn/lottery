@@ -1,0 +1,49 @@
+{
+    "app": {
+        "title": "Lottery Tools",
+        "version": "Version {version}",
+        "welcome": "Welcome to Lottery Tools"
+    },
+    "menu": {
+        "file": "File",
+        "edit": "Edit",
+        "view": "View",
+        "help": "Help",
+        "about": "About"
+    },
+    "lottery": {
+        "dlt": {
+            "name": "Big Lotto",
+            "front": "Front Numbers",
+            "back": "Back Numbers",
+            "complex": "Complex Bet",
+            "dantuo": "Dantuo Bet"
+        },
+        "ssq": {
+            "name": "Double Color Ball",
+            "red": "Red Numbers",
+            "blue": "Blue Number",
+            "complex": "Complex Bet",
+            "dantuo": "Dantuo Bet"
+        }
+    },
+    "analysis": {
+        "title": "Data Analysis",
+        "frequency": "Frequency Analysis",
+        "missing": "Missing Analysis",
+        "trend": "Trend Analysis",
+        "pattern": "Number Patterns"
+    },
+    "messages": {
+        "error": {
+            "invalid_number": "Invalid number",
+            "duplicate_number": "Duplicate number",
+            "range_error": "Number out of range",
+            "database_error": "Database error: {error}"
+        },
+        "success": {
+            "data_saved": "Data saved successfully",
+            "analysis_complete": "Analysis completed"
+        }
+    }
+}

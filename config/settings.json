@@ -1,0 +1,10 @@
+{
+  "theme": "默认",
+  "font_size": 12,
+  "db_path": "data/db",
+  "auto_save": true,
+  "backup_enabled": true,
+  "backup_interval": 24,
+  "max_history": 1000,
+  "default_lottery": "dlt"
+}

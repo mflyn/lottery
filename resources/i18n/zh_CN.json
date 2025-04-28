@@ -1,0 +1,49 @@
+{
+    "app": {
+        "title": "彩票工具集",
+        "version": "版本 {version}",
+        "welcome": "欢迎使用彩票工具集"
+    },
+    "menu": {
+        "file": "文件",
+        "edit": "编辑",
+        "view": "视图",
+        "help": "帮助",
+        "about": "关于"
+    },
+    "lottery": {
+        "dlt": {
+            "name": "大乐透",
+            "front": "前区号码",
+            "back": "后区号码",
+            "complex": "复式投注",
+            "dantuo": "胆拖投注"
+        },
+        "ssq": {
+            "name": "双色球",
+            "red": "红球号码",
+            "blue": "蓝球号码",
+            "complex": "复式投注",
+            "dantuo": "胆拖投注"
+        }
+    },
+    "analysis": {
+        "title": "数据分析",
+        "frequency": "出现频率",
+        "missing": "遗漏分析",
+        "trend": "走势分析",
+        "pattern": "号码规律"
+    },
+    "messages": {
+        "error": {
+            "invalid_number": "无效号码",
+            "duplicate_number": "重复号码",
+            "range_error": "号码超出范围",
+            "database_error": "数据库错误: {error}"
+        },
+        "success": {
+            "data_saved": "数据保存成功",
+            "analysis_complete": "分析完成"
+        }
+    }
+}

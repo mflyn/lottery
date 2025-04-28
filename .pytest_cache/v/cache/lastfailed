@@ -1,0 +1,23 @@
+{
+  "tests/core/features/test_feature_engineering.py::TestFeatureEngineering::test_extract_combination_features": true,
+  "tests/core/features/test_feature_engineering.py::TestFeatureEngineering::test_extract_statistical_features": true,
+  "tests/core/features/test_feature_engineering.py::TestFeatureEngineering::test_extract_temporal_features": true,
+  "tests/core/features/test_feature_engineering.py::TestFeatureEngineering::test_generate_features": true,
+  "tests/core/features/test_feature_engineering.py::TestFeatureEngineering::test_generate_features_no_processor": true,
+  "tests/core/features/test_feature_engineering.py::TestFeatureEngineering::test_get_feature_importance_report": true,
+  "tests/core/features/test_feature_engineering.py::TestFeatureEngineering::test_init": true,
+  "tests/core/features/test_feature_engineering.py::TestFeatureEngineering::test_select_features": true,
+  "tests/test_data_manager.py::TestDataManager::test_database_connection": true,
+  "tests/test_data_manager.py::TestDataManager::test_export_data": true,
+  "tests/test_data_manager.py::TestDataManager::test_import_data": true,
+  "tests/test_data_manager.py::TestDataManager::test_import_invalid_data": true,
+  "tests/test_data_manager.py::TestDataManager::test_table_creation": true,
+  "tests/test_number_patterns.py::TestNumberPatterns::test_consecutive_numbers": true,
+  "tests/test_model.py::TestModelPipeline::test_ensemble_model": true,
+  "tests/test_model.py::TestModelPipeline::test_model_interpretation": true,
+  "tests/test_model.py::TestModelPipeline::test_preprocessing": true,
+  "tests/unit/test_feature_engineering.py::TestFeatureEngineering::test_basic_feature_generation": true,
+  "tests/test_feature_generator.py::test_statistical_features_ssq": true,
+  "tests/test_feature_generator.py::test_statistical_features_dlt": true,
+  "tests/test_feature_generator.py::test_temporal_features_ssq": true
+}
