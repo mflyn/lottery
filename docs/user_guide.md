@@ -4,7 +4,7 @@
 
 在项目根目录下运行：
 ```python
-python -m src.gui.main_window
+python3 -m src.gui.main_window
 ```
 
 ## 2. 主界面说明

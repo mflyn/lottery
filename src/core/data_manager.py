@@ -14,23 +14,23 @@ DATE_LIMIT = pd.to_datetime('2020-01-01')
 
 class LotteryDataManager:
     """彩票数据管理器"""
-    
+
     def __init__(self, data_path: str):
         """初始化数据管理器
-        
+
         Args:
             data_path: 数据文件路径
         """
         self.data_path = Path(data_path)
         self.data_path.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger(__name__)
-        
+
         # 支持的彩票类型
         self.LOTTERY_TYPES = {
             'ssq': '双色球',
             'dlt': '大乐透'
         }
-        
+
         # 数据文件路径 (改为 JSON)
         self.data_files = {
             'ssq': self.data_path / 'ssq_history.json',
@@ -39,17 +39,17 @@ class LotteryDataManager:
 
     def get_history_data(self, lottery_type: str, periods: Optional[int] = None) -> pd.DataFrame:
         """获取历史数据 (从 JSON 文件读取)
-        
+
         Args:
             lottery_type: 彩票类型 ('ssq'/'dlt')
             periods: 获取期数，None表示获取所有历史数据
-            
+
         Returns:
             历史数据DataFrame，包含 'data' 键下的列表数据
         """
         if lottery_type not in self.LOTTERY_TYPES:
             raise ValueError(f"不支持的彩票类型: {lottery_type}")
-            
+
         try:
             file_path = self.data_files[lottery_type]
             if file_path.exists():
@@ -129,7 +129,7 @@ class LotteryDataManager:
             else:
                 self.logger.warning(f"数据文件不存在: {file_path}")
                 return pd.DataFrame()
-                
+
         except json.JSONDecodeError as e:
              self.logger.error(f"读取 JSON 文件失败: {file_path}, 错误: {e}")
              return pd.DataFrame()
@@ -139,10 +139,10 @@ class LotteryDataManager:
 
     def update_data(self, lottery_type: str) -> bool:
         """更新最新数据 (保存为 JSON)
-        
+
         Args:
             lottery_type: 彩票类型
-            
+
         Returns:
             更新是否成功
         """
@@ -206,29 +206,32 @@ class LotteryDataManager:
 
     def _fetch_online_data_as_list(self, lottery_type: str, page_size: int = 30) -> Optional[List[Dict]]:
         """获取在线数据并直接返回解析后的字典列表 (参考旧代码)
-        
+
         Args:
             lottery_type: 彩票类型 ('ssq'/'dlt')
             page_size: 获取的记录条数，默认为30
-            
+
         Returns:
             包含最新数据的字典列表，获取失败则返回 None
         """
         if lottery_type == 'ssq':
+            # 使用福彩网API获取双色球数据
             base_url = "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice"
             params = {
                 "name": "ssq",
-                "pageSize": str(page_size), # 获取最近 page_size 期
                 "pageNo": "1",
-                "systemType": "0"
+                "pageSize": str(page_size),
+                "systemType": "PC"
             }
-            headers = { # 使用旧代码中的 Headers
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                'Connection': 'keep-alive',
-                'Referer': 'https://www.cwl.gov.cn/kjxx/ssq/kjgg/',
-                'Origin': 'https://www.cwl.gov.cn'
+
+            # 添加随机User-Agent，避免被识别为爬虫
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Referer": "https://www.cwl.gov.cn/",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Connection": "keep-alive",
+                "Origin": "https://www.cwl.gov.cn"
             }
         elif lottery_type == 'dlt':
             base_url = "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry"
@@ -258,63 +261,132 @@ class LotteryDataManager:
 
             extracted_data_list = []
             if lottery_type == 'ssq':
-                if data.get('message') == "查询成功" and 'result' in data and isinstance(data['result'], list):
-                    for item in data['result']:
+                # --- SSQ 分页获取逻辑 --- >
+                page_no = 1
+                total_pages = 1 # 初始假设至少有1页
+                all_ssq_items = []
+                max_pages_to_fetch = 100 # 设置一个最大页数限制，防止无限循环
+                fetch_delay = 1 # 每页请求间隔秒数
+                stop_fetching = False # 标记是否因日期过早而停止
+
+                while page_no <= total_pages and page_no <= max_pages_to_fetch:
+                    params['pageNo'] = str(page_no)
+                    try:
+                        response = requests.get(base_url, params=params, headers=headers, timeout=20)
+                        response.raise_for_status()
+                        data = response.json()
+
+                        if data.get('state') == 0 and 'result' in data:
+                            page_items = data['result']
+                            if not page_items and page_no > 1: # 如果不是第一页且返回为空，说明获取完毕
+                                break
+
+                            all_ssq_items.extend(page_items)
+
+                            # --- 添加日期检查，如果本页最旧的数据已早于限制，则停止 --- >
+                            if page_items:
+                                 last_item_date_raw = page_items[-1].get('date', '')
+                                 last_item_date_str = last_item_date_raw.split('(')[0] if '(' in last_item_date_raw else last_item_date_raw
+                                 try:
+                                     last_item_dt = pd.to_datetime(last_item_date_str)
+                                     if last_item_dt < DATE_LIMIT:
+                                          stop_fetching = True
+                                 except ValueError:
+                                      self.logger.warning(f"SSQ 无法解析页面 {page_no} 最后一条记录的日期: {last_item_date_str}")
+                            # <-----------------------------------------------------------
+
+                            # 更新总页数 (只在第一页或 total_pages 仍为初始值时更新)
+                            if page_no == 1 or total_pages == 1:
+                                total_count = data.get('pageCount', 0)
+                                if total_count > 0:
+                                     total_pages = total_count
+
+                            page_no += 1
+                            # 添加延时防止请求过快
+                            if page_no <= total_pages and page_no <= max_pages_to_fetch and not stop_fetching:
+                                 time.sleep(fetch_delay)
+                            elif stop_fetching:
+                                 break # 如果日期过早，跳出循环
+
+                        else:
+                            self.logger.warning(f"在线获取 SSQ 数据失败 (Page {page_no}): state={data.get('state')}, message={data.get('message')}")
+                            break # 单页失败则停止
+
+                    except requests.exceptions.RequestException as e:
+                        self.logger.error(f"获取 SSQ 第 {page_no} 页网络请求失败: {str(e)}")
+                        break # 网络错误则停止
+                    except (json.JSONDecodeError, KeyError, Exception) as e:
+                        self.logger.error(f"解析 SSQ 第 {page_no} 页数据或发生其他错误: {str(e)}", exc_info=True)
+                        break # 解析错误则停止
+                # <--- SSQ 分页结束 ---
+
+                # --- 解析所有获取到的 SSQ items --- >
+                for item in all_ssq_items:
+                     try:
+                        draw_num = item.get('code')
+                        # 处理日期格式，去掉括号中的星期信息
+                        draw_date_raw = item.get('date', '')
+                        draw_date = draw_date_raw.split('(')[0] if '(' in draw_date_raw else draw_date_raw
+                        red_str = item.get('red', '')
+                        blue_str = item.get('blue', '')
+                        # 处理福彩网API返回的号码格式
+                        # 红球和蓝球已经分开返回
+                        red_numbers = [int(n) for n in red_str.split(',')]
+                        blue_number = int(blue_str)
+
+                        # 红球按大小排序
+                        red_numbers = sorted(red_numbers)
+
+                        # 组合成列表
+                        numbers_list = red_numbers + [blue_number]
+
+                        prize_pool_str = item.get('poolmoney', '0')
+                        sales_str = item.get('sales', '0')
+
+                        # --- 添加日期检查 (虽然分页处已检查，这里再加一层保险) --- >
                         try:
-                            draw_num = item.get('code')
-                            draw_date = item.get('date', '').split()[0] # 取日期部分
-                            red_str = item.get('red', '')
-                            blue_str = item.get('blue', '')
-                            prize_pool_str = item.get('poolmoney', '0')
-                            sales_str = item.get('sales', '0')
-
-                            # --- 添加日期检查 --- >
-                            try:
-                                draw_dt = pd.to_datetime(draw_date)
-                                if draw_dt < DATE_LIMIT:
-                                     continue # 跳过早于限制日期的记录
-                            except ValueError:
-                                 self.logger.warning(f"SSQ 期号 {draw_num} 日期格式无法解析: {draw_date}，已跳过。")
+                            draw_dt = pd.to_datetime(draw_date)
+                            if draw_dt < DATE_LIMIT:
                                  continue
-                            # <-------------------
+                        except ValueError:
+                             self.logger.warning(f"SSQ 期号 {draw_num} 日期格式无法解析: {draw_date}，已跳过。")
+                             continue
+                        # <-------------------
 
-                            if not all([draw_num, draw_date, red_str, blue_str]):
-                                self.logger.warning(f"SSQ 期号 {draw_num} 数据不完整，已跳过: {item}")
-                                continue
-
-                            red_numbers = sorted([int(n) for n in red_str.split(',')])
-                            blue_number = int(blue_str)
-
-                            # 号码验证 (参考旧代码)
-                            if (len(red_numbers) != 6 or
-                                not all(1 <= n <= 33 for n in red_numbers) or
-                                not (1 <= blue_number <= 16) or
-                                len(set(red_numbers)) != 6):
-                                self.logger.warning(f"SSQ 期号 {draw_num} 号码验证失败，已跳过: red={red_numbers}, blue={blue_number}")
-                                continue
-
-                            # 获取奖级信息 (参考旧代码)
-                            prizegrades = item.get('prizegrades', [])
-                            first_prize_num = prizegrades[0].get('typenum', '0') if prizegrades else '0' # 旧代码用 num?
-                            first_prize_amount = prizegrades[0].get('typemoney', '0') if prizegrades else '0' # 旧代码用 money?
-
-                            extracted_data_list.append({
-                                'draw_num': draw_num,
-                                'draw_date': draw_date,
-                                'red_numbers': red_numbers, # 直接存储列表
-                                'blue_number': blue_number, # 直接存储数字
-                                'prize_pool': prize_pool_str, # 保持字符串，后续处理
-                                'sales': sales_str,         # 保持字符串，后续处理
-                                'first_prize_num': first_prize_num,
-                                'first_prize_amount': first_prize_amount
-                                # 可以根据需要添加其他奖级信息
-                            })
-                        except (ValueError, TypeError, KeyError, IndexError) as e:
-                            self.logger.error(f"解析 SSQ item {item.get('code')} 时出错: {e}", exc_info=True)
+                        if not all([draw_num, draw_date, len(numbers_list) >= 7]):
+                            self.logger.warning(f"SSQ 期号 {draw_num} 数据不完整，已跳过: {item}")
                             continue
-                else:
-                     self.logger.warning(f"在线获取 SSQ 数据失败: API 响应状态或消息不正确。State: {data.get('state')}, Message: {data.get('message')}")
-                     return None # API 返回错误，获取失败
+
+                        # 这里不需要再次转换和排序，因为在前面的代码中已经做了这个操作
+                        red_numbers = numbers_list[:-1]  # 前面的是红球
+                        blue_number = numbers_list[-1]   # 最后一个是蓝球
+
+                        # 号码验证 (参考旧代码)
+                        if (len(red_numbers) != 6 or
+                            not all(1 <= n <= 33 for n in red_numbers) or
+                            not (1 <= blue_number <= 16) or
+                            len(set(red_numbers)) != 6):
+                            self.logger.warning(f"SSQ 期号 {draw_num} 号码验证失败，已跳过: red={red_numbers}, blue={blue_number}")
+                            continue
+
+                        # 获取奖级信息
+                        first_prize_num = item.get('onebonus', '0')  # 一等奖注数
+                        first_prize_amount = item.get('onemoney', '0')  # 一等奖奖金
+
+                        extracted_data_list.append({
+                            'draw_num': draw_num,
+                            'draw_date': draw_date,
+                            'red_numbers': red_numbers, # 直接存储列表
+                            'blue_number': blue_number, # 直接存储数字
+                            'prize_pool': prize_pool_str, # 保持字符串，后续处理
+                            'sales': sales_str,         # 保持字符串，后续处理
+                            'first_prize_num': first_prize_num,
+                            'first_prize_amount': first_prize_amount
+                        })
+                     except (ValueError, TypeError, KeyError, IndexError) as e:
+                         self.logger.error(f"解析 SSQ item {item.get('lotteryDrawNum')} 时出错: {e}", exc_info=True)
+                         continue
+                # <--- 解析结束 ---
 
             elif lottery_type == 'dlt':
                 # --- DLT 分页获取逻辑 --- >
@@ -454,11 +526,11 @@ class LotteryDataManager:
 
     def get_issue_data(self, lottery_type: str, issue: str) -> Optional[Dict]:
         """从本地历史数据中获取指定期号的数据 (从 JSON 读取)
-        
+
         Args:
             lottery_type: 彩票类型 ('ssq'/'dlt')
             issue: 要查询的期号
-            
+
         Returns:
             包含该期号数据的字典 (特别是号码列表)，如果未找到则返回 None
         """
@@ -629,30 +701,30 @@ class LotteryDataManager:
             'ssq': ['date', 'issue', 'numbers', 'prize_pool', 'sales'],
             'dlt': ['date', 'issue', 'numbers', 'prize_pool', 'sales']
         }
-        
+
         # 检查必需列
         if not all(col in data.columns for col in required_columns[lottery_type]):
             return False
-            
+
         # 验证日期格式
         try:
             pd.to_datetime(data['date'])
         except:
             return False
-            
+
         # 验证期号格式
         if not data['issue'].astype(str).str.match(r'^\d{8}$').all():
             return False
-            
+
         return True
 
     def get_statistics(self, lottery_type: str, start_date: Optional[str] = None) -> Dict[str, Any]:
         """获取统计数据
-        
+
         Args:
             lottery_type: 彩票类型
             start_date: 开始日期，None表示所有历史数据
-            
+
         Returns:
             统计结果字典
         """
@@ -660,10 +732,10 @@ class LotteryDataManager:
             data = self.get_history_data(lottery_type)
             if data.empty:
                 return {}
-                
+
             if start_date:
                 data = data[data['date'] >= start_date]
-                
+
             # 计算基础统计数据
             stats = {
                 'total_periods': len(data),
@@ -674,9 +746,9 @@ class LotteryDataManager:
                 'last_updated': data['date'].max().strftime('%Y-%m-%d'),
                 'first_period': data['date'].min().strftime('%Y-%m-%d')
             }
-            
+
             return stats
-            
+
         except Exception as e:
             self.logger.error(f"获取统计数据失败: {str(e)}")
             return {}
