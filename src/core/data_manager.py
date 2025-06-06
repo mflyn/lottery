@@ -234,6 +234,7 @@ class LotteryDataManager:
                 "Origin": "https://www.cwl.gov.cn"
             }
         elif lottery_type == 'dlt':
+            # 使用体彩网API获取大乐透数据，但使用更新的参数和错误处理
             base_url = "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry"
             params = {
                 "gameNo": "85",
@@ -242,13 +243,15 @@ class LotteryDataManager:
                 "isVerify": "1",
                 "pageNo": "1"
             }
-            headers = { # 使用旧代码中的 Headers
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'application/json, text/plain, */*',
                 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
                 'Connection': 'keep-alive',
                 'Referer': 'https://www.sporttery.cn/',
-                'Origin': 'https://www.sporttery.cn'
+                'Origin': 'https://www.sporttery.cn',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
             }
         else:
             self.logger.error(f"不支持的彩票类型: {lottery_type}")
@@ -458,6 +461,14 @@ class LotteryDataManager:
                         prize_pool_str = item.get('poolBalanceAfterdraw', '0')
                         sales_str = item.get('totalSaleAmount', '0')
 
+                        # 解析前区和后区号码
+                        if len(numbers_list) >= 7:
+                            front_numbers = sorted([int(n) for n in numbers_list[:5]])
+                            back_numbers = sorted([int(n) for n in numbers_list[5:7]])
+                        else:
+                            self.logger.warning(f"DLT 期号 {draw_num} 号码数量不足，已跳过: {numbers_list}")
+                            continue
+
                         # --- 添加日期检查 (虽然分页处已检查，这里再加一层保险) --- >
                         try:
                             draw_dt = pd.to_datetime(draw_date)
@@ -468,12 +479,9 @@ class LotteryDataManager:
                              continue
                         # <-------------------
 
-                        if not all([draw_num, draw_date, len(numbers_list) >= 7]):
+                        if not all([draw_num, draw_date, len(front_numbers) == 5, len(back_numbers) == 2]):
                             self.logger.warning(f"DLT 期号 {draw_num} 数据不完整，已跳过: {item}")
                             continue
-
-                        front_numbers = sorted([int(n) for n in numbers_list[:5]])
-                        back_numbers = sorted([int(n) for n in numbers_list[5:7]])
 
                         # 号码验证 (参考旧代码)
                         if (len(front_numbers) != 5 or len(back_numbers) != 2 or
