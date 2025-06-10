@@ -351,11 +351,24 @@ class DataValidator:
         if 'draw_num' not in data.columns:
             return
         
-        # 期号应该是8位数字
-        invalid_issues = data[~data['draw_num'].astype(str).str.match(r'^\d{8}$')]
+        # 根据彩票类型验证期号格式
+        if self.lottery_type == 'ssq':
+            # 双色球期号应该是8位数字 (YYYYNNN)
+            pattern = r'^\d{8}$'
+            expected_format = "8位数字"
+        elif self.lottery_type == 'dlt':
+            # 大乐透期号应该是5位数字 (YYNNN)
+            pattern = r'^\d{5}$'
+            expected_format = "5位数字"
+        else:
+            # 其他类型，使用通用格式
+            pattern = r'^\d{4,8}$'
+            expected_format = "4-8位数字"
+        
+        invalid_issues = data[~data['draw_num'].astype(str).str.match(pattern)]
         if not invalid_issues.empty:
             self._add_result("issue_format", ValidationLevel.ERROR,
-                           f"发现 {len(invalid_issues)} 条记录的期号格式不正确")
+                           f"发现 {len(invalid_issues)} 条记录的期号格式不正确（期望{expected_format}）")
     
     def _validate_issue_uniqueness(self, data: pd.DataFrame, params: Dict):
         """验证期号唯一性"""

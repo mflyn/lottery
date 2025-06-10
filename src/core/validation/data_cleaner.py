@@ -80,13 +80,15 @@ class DataCleaner:
             if remove_invalid:
                 data = self._remove_invalid_records(data)
             
-            # 5. 最终验证
+            # 5. 更新清洗统计
+            self.cleaning_stats['cleaned_records'] = len(data)
+            
+            # 6. 最终验证
             validation_result = self.validator.validate(data)
             
-            # 6. 生成清洗报告
+            # 7. 生成清洗报告
             report = self._generate_cleaning_report(validation_result)
             
-            self.cleaning_stats['cleaned_records'] = len(data)
             self.logger.info(f"数据清洗完成，保留 {len(data)} 条有效记录")
             
             return data, report

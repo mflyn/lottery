@@ -65,24 +65,31 @@ class FrequencyAnalyzer(BaseAnalyzer):
                 'top_10_cold': self._get_top_numbers(red_frequency, 10, reverse=False)
             }
         
-        # 蓝球分析
+        # 蓝球分析 - 优先使用blue_number列，如果没有则使用blue_1列
+        blue_numbers = None
         if 'blue_number' in data.columns:
+            # 使用原始的blue_number列（单个数值）
             blue_numbers = [[int(row['blue_number'])] for _, row in data.iterrows() 
                            if pd.notna(row['blue_number'])]
-            if blue_numbers:
-                blue_frequency = self.calculate_frequency(blue_numbers, self.config['blue_range'])
-                blue_missing = self.calculate_missing_values(blue_numbers, self.config['blue_range'])
-                blue_classification = self.classify_hot_cold_numbers(blue_frequency)
-                blue_stats = self.calculate_statistics(blue_numbers)
-                
-                result['blue_ball'] = {
-                    'frequency': blue_frequency,
-                    'missing_values': blue_missing,
-                    'classification': blue_classification,
-                    'statistics': blue_stats,
-                    'top_5_hot': self._get_top_numbers(blue_frequency, 5, reverse=True),
-                    'top_5_cold': self._get_top_numbers(blue_frequency, 5, reverse=False)
-                }
+        elif 'blue_1' in data.columns:
+            # 使用展开的blue_1列
+            blue_numbers = [[int(row['blue_1'])] for _, row in data.iterrows() 
+                           if pd.notna(row['blue_1'])]
+        
+        if blue_numbers:
+            blue_frequency = self.calculate_frequency(blue_numbers, self.config['blue_range'])
+            blue_missing = self.calculate_missing_values(blue_numbers, self.config['blue_range'])
+            blue_classification = self.classify_hot_cold_numbers(blue_frequency)
+            blue_stats = self.calculate_statistics(blue_numbers)
+            
+            result['blue_ball'] = {
+                'frequency': blue_frequency,
+                'missing_values': blue_missing,
+                'classification': blue_classification,
+                'statistics': blue_stats,
+                'top_5_hot': self._get_top_numbers(blue_frequency, 5, reverse=True),
+                'top_5_cold': self._get_top_numbers(blue_frequency, 5, reverse=False)
+            }
         
         return result
     
@@ -171,12 +178,18 @@ class FrequencyAnalyzer(BaseAnalyzer):
                     red_trends = self.analyze_trends(red_numbers, window_size)
                     result['red_ball_trends'] = red_trends
                 
+                # 蓝球趋势分析 - 优先使用blue_number列，如果没有则使用blue_1列
+                blue_numbers = None
                 if 'blue_number' in data.columns:
                     blue_numbers = [[int(row['blue_number'])] for _, row in data.iterrows() 
                                    if pd.notna(row['blue_number'])]
-                    if blue_numbers:
-                        blue_trends = self.analyze_trends(blue_numbers, window_size)
-                        result['blue_ball_trends'] = blue_trends
+                elif 'blue_1' in data.columns:
+                    blue_numbers = [[int(row['blue_1'])] for _, row in data.iterrows() 
+                                   if pd.notna(row['blue_1'])]
+                
+                if blue_numbers:
+                    blue_trends = self.analyze_trends(blue_numbers, window_size)
+                    result['blue_ball_trends'] = blue_trends
             
             elif self.lottery_type == 'dlt':
                 front_numbers = self.extract_numbers(data, 'front_numbers')

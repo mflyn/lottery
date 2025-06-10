@@ -27,7 +27,7 @@ class BaseAnalyzer(ABC):
         # 设置彩票相关参数
         if lottery_type == 'ssq':
             self.red_columns = [f'red_{i}' for i in range(1, 7)]
-            self.blue_columns = ['blue']
+            self.blue_columns = ['blue_1']  # 修正为实际的列名
             self.red_range = (1, 33)
             self.blue_range = (1, 16)
             self.config = {

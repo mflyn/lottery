@@ -142,13 +142,23 @@ def generate_hot_cold_numbers(lottery_type: str, num_sets: int, freq_results: Di
     generated_sets = []
 
     try:
+        # 从FrequencyAnalyzer的结果中提取频率数据
+        if 'data' not in freq_results:
+            print("错误：频率分析结果格式不正确，缺少'data'键")
+            return []
+        
+        data = freq_results['data']
+        
         if lottery_type == 'ssq':
-            red_freq = freq_results.get('red', {}).get('frequencies', {})
-            blue_freq = freq_results.get('blue', {}).get('frequencies', {})
+            # 提取双色球频率数据
+            red_freq = data.get('red_ball', {}).get('frequency', {})
+            blue_freq = data.get('blue_ball', {}).get('frequency', {})
 
             if not red_freq or not blue_freq:
-                 print("错误：双色球频率数据不足")
-                 return []
+                print("错误：双色球频率数据不足")
+                print(f"红球频率数据: {len(red_freq)} 项")
+                print(f"蓝球频率数据: {len(blue_freq)} 项")
+                return []
 
             red_numbers = np.array([int(k) for k in red_freq.keys()])
             red_counts = np.array([v for v in red_freq.values()])
@@ -165,12 +175,15 @@ def generate_hot_cold_numbers(lottery_type: str, num_sets: int, freq_results: Di
                 generated_sets.append({'red': selected_red, 'blue': selected_blue})
 
         elif lottery_type == 'dlt':
-            front_freq = freq_results.get('front', {}).get('frequencies', {})
-            back_freq = freq_results.get('back', {}).get('frequencies', {})
+            # 提取大乐透频率数据
+            front_freq = data.get('front_area', {}).get('frequency', {})
+            back_freq = data.get('back_area', {}).get('frequency', {})
 
             if not front_freq or not back_freq:
-                 print("错误：大乐透频率数据不足")
-                 return []
+                print("错误：大乐透频率数据不足")
+                print(f"前区频率数据: {len(front_freq)} 项")
+                print(f"后区频率数据: {len(back_freq)} 项")
+                return []
 
             front_numbers = np.array([int(k) for k in front_freq.keys()])
             front_counts = np.array([v for v in front_freq.values()])
@@ -190,8 +203,8 @@ def generate_hot_cold_numbers(lottery_type: str, num_sets: int, freq_results: Di
 
     except Exception as e:
         print(f"生成冷热号码时出错: {e}")
-        # import traceback
-        # traceback.print_exc() # 调试时可以取消注释打印详细错误
+        import traceback
+        traceback.print_exc() # 打印详细错误信息用于调试
         return [] # 出错时返回空列表
 
     return generated_sets
