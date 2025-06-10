@@ -2,7 +2,8 @@ import unittest
 import pandas as pd
 import numpy as np
 from unittest.mock import MagicMock, patch
-from src.core.features.feature_engineering import FeatureEngineering, FeatureProcessor
+from src.core.features.feature_engineering import FeatureEngineering
+from src.core.features.feature_processor import FeatureProcessor
 
 class TestFeatureEngineering(unittest.TestCase):
     """特征工程模块单元测试"""

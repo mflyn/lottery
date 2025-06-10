@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Optional
-from ..models import LotteryNumber, DLTNumber, SSQNumber
+from typing import List, Dict
+from ..models import LotteryNumber
 
 class NumberGenerator(ABC):
     """号码生成器基类"""
@@ -8,7 +8,7 @@ class NumberGenerator(ABC):
     def __init__(self, lottery_type: str):
         self.lottery_type = lottery_type
         self.config = self._get_config()
-        
+    
     @abstractmethod
     def generate(self, count: int = 1, **kwargs) -> List[LotteryNumber]:
         """生成号码"""

@@ -1239,7 +1239,64 @@ class LotteryApp:
 
         # 状态栏
 
+# 在文件末尾添加缺失的LotteryToolsGUI类
+class LotteryToolsGUI:
+    """彩票工具集主应用程序类"""
+    
+    def __init__(self, root=None, data_path=None):
+        """初始化应用程序
+        
+        Args:
+            root: Tkinter根窗口，如果为None则创建新窗口
+            data_path: 数据路径，如果为None则使用默认路径
+        """
+        if root is None:
+            self.root = tk.Tk()
+        else:
+            self.root = root
+            
+        self.data_path = data_path or "data"
+        self._setup_window()
+        self._create_application()
+    
+    def _setup_window(self):
+        """设置窗口属性"""
+        self.root.title("彩票工具集")
+        self.root.geometry("1000x700")
+        self.root.minsize(800, 600)
+        
+        # 设置窗口图标（如果有的话）
+        try:
+            # self.root.iconbitmap("resources/icon.ico")
+            pass
+        except:
+            pass
+    
+    def _create_application(self):
+        """创建应用程序主界面"""
+        # 使用现有的LotteryApp类
+        self.app = LotteryApp(self.root)
+    
+    def run(self):
+        """运行应用程序"""
+        try:
+            self.root.mainloop()
+        except KeyboardInterrupt:
+            self.quit()
+        except Exception as e:
+            messagebox.showerror("应用程序错误", f"发生未知错误: {str(e)}")
+            self.quit()
+    
+    def quit(self):
+        """退出应用程序"""
+        try:
+            self.root.quit()
+            self.root.destroy()
+        except:
+            pass
+
 if __name__ == "__main__":
+    # 保持原有的启动方式
     root = tk.Tk()
     app = LotteryApp(root)
     root.mainloop()

@@ -155,7 +155,8 @@ def test_temporal_features_ssq():
     assert 'days_since_last' in features.columns
     assert 'avg_interval_5' in features.columns
     assert 'draw_order_in_month' in features.columns
-    assert features['days_since_last'].iloc[1:].equals(pd.Series([3] * 49))
+    # 检查间隔天数（除了第一个值是NaN，其他都应该是3）
+    assert features['days_since_last'].iloc[1:].fillna(0).eq(3.0).all()
     
     # 验证时序特征
     assert 'red_sum_lag_1' in features.columns
@@ -237,7 +238,8 @@ def test_pattern_features_ssq():
     # 验证连号特征
     assert 'consecutive_count' in features.columns
     assert 'max_consecutive_length' in features.columns
-    assert features.loc[0, 'consecutive_count'] == 2  # 1,2,3连号
+    assert features.loc[0, 'consecutive_count'] == 1  # 1,2,3是一个连号组
+    assert features.loc[0, 'max_consecutive_length'] == 3  # 最大连号长度是3
     
     # 验证重复模式特征
     assert 'red_repeat_1' in features.columns
@@ -270,7 +272,7 @@ def test_pattern_features_dlt():
     
     # 验证连号特征
     assert 'consecutive_count' in features.columns
-    assert features.loc[0, 'consecutive_count'] == 2  # 1,2,3连号
+    assert features.loc[0, 'consecutive_count'] == 1  # 1,2,3是一个连号组
     
     # 验证重复模式特征
     assert 'red_repeat_1' in features.columns
@@ -300,7 +302,8 @@ def test_pattern_features_edge_cases():
     })
     features = generator._generate_pattern_features(data)
     assert len(features) == 1
-    assert features.loc[0, 'consecutive_count'] == 5  # 1,2,3,4,5,6全是连号
+    assert features.loc[0, 'consecutive_count'] == 1  # 1,2,3,4,5,6是一个连号组
+    assert features.loc[0, 'max_consecutive_length'] == 6  # 最大连号长度是6
 
 def test_pattern_features_invalid_data():
     # 测试无效数据

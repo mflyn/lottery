@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple
 from collections import Counter
-from .random_generator import LotteryNumber, RandomNumberGenerator
+from .random_generator import RandomGenerator
+from ..models import LotteryNumber
 from ..features.feature_engineering import FeatureEngineering
 from ..data_manager import LotteryDataManager
 
@@ -11,7 +12,7 @@ class SmartNumberGenerator:
     
     def __init__(self, lottery_type: str):
         self.lottery_type = lottery_type
-        self.random_generator = RandomNumberGenerator(lottery_type)
+        self.random_generator = RandomGenerator(lottery_type)
         self.data_manager = LotteryDataManager()
         self.feature_engineering = FeatureEngineering()
         
@@ -33,35 +34,59 @@ class SmartNumberGenerator:
             }
         }
 
+    def generate(self, count: int = 1, **kwargs) -> List[LotteryNumber]:
+        """生成号码（兼容接口）
+        
+        Args:
+            count: 需要生成的号码组数
+            **kwargs: 其他参数
+            
+        Returns:
+            生成的号码列表
+        """
+        try:
+            return self.generate_recommended(count)
+        except Exception:
+            # 如果智能生成失败，回退到随机生成
+            return self.random_generator.generate(count)
+
     def generate_recommended(self, count: int = 1) -> List[LotteryNumber]:
         """生成推荐号码
         
         Args:
             count: 需要生成的号码组数
         """
-        # 获取历史数据
-        history_data = self.data_manager.get_history_data(self.lottery_type)
-        
-        # 特征工程
-        features = self.feature_engineering.generate_features(history_data)
-        
-        # 分析热冷号
-        hot_cold_numbers = self._analyze_hot_cold_numbers(history_data)
-        
-        # 分析号码间隔
-        gap_patterns = self._analyze_gap_patterns(history_data)
-        
-        # 生成符合模式的号码
-        numbers = []
-        for _ in range(count):
-            number = self._generate_smart_number(
-                hot_cold_numbers,
-                gap_patterns,
-                features
-            )
-            numbers.append(number)
+        try:
+            # 获取历史数据
+            history_data = self.data_manager.get_history_data(self.lottery_type)
             
-        return numbers
+            # 如果没有历史数据，使用随机生成
+            if history_data is None or history_data.empty:
+                return self.random_generator.generate(count)
+            
+            # 特征工程
+            features = self.feature_engineering.generate_features(history_data)
+            
+            # 分析热冷号
+            hot_cold_numbers = self._analyze_hot_cold_numbers(history_data)
+            
+            # 分析号码间隔
+            gap_patterns = self._analyze_gap_patterns(history_data)
+            
+            # 生成符合模式的号码
+            numbers = []
+            for _ in range(count):
+                number = self._generate_smart_number(
+                    hot_cold_numbers,
+                    gap_patterns,
+                    features
+                )
+                numbers.append(number)
+                
+            return numbers
+        except Exception:
+            # 如果智能生成失败，回退到随机生成
+            return self.random_generator.generate(count)
     
     def _generate_smart_number(self, 
                              hot_cold_numbers: Dict,

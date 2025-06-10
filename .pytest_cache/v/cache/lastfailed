@@ -17,7 +17,9 @@
   "tests/test_model.py::TestModelPipeline::test_model_interpretation": true,
   "tests/test_model.py::TestModelPipeline::test_preprocessing": true,
   "tests/unit/test_feature_engineering.py::TestFeatureEngineering::test_basic_feature_generation": true,
-  "tests/test_feature_generator.py::test_statistical_features_ssq": true,
-  "tests/test_feature_generator.py::test_statistical_features_dlt": true,
-  "tests/test_feature_generator.py::test_temporal_features_ssq": true
+  "tests/core/features/test_feature_engineering.py": true,
+  "tests/integration/test_number_generation.py": true,
+  "tests/test_data_validation.py::TestDataValidator": true,
+  "tests/test_data_validation.py::TestDataCleaner": true,
+  "tests/test_data_validation.py::TestConvenienceFunctions": true
 }

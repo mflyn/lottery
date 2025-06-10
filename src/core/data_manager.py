@@ -4,37 +4,55 @@ import os
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
-import requests
+from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 import time
-
-# 定义日期限制
-DATE_LIMIT = pd.to_datetime('2020-01-01')
+from .config_manager import get_config_manager
+from .network_client import get_network_client, NetworkError, TimeoutError, ConnectionError, HTTPError
+from .validation import DataValidator, DataCleaner, validate_lottery_data, clean_lottery_data
 
 class LotteryDataManager:
     """彩票数据管理器"""
 
-    def __init__(self, data_path: str):
+    def __init__(self, data_path: Optional[str] = None):
         """初始化数据管理器
 
         Args:
-            data_path: 数据文件路径
+            data_path: 数据文件路径，如果为None则使用配置中的路径
         """
+        self.config_manager = get_config_manager()
+        
+        # 使用配置管理器获取数据路径
+        if data_path is None:
+            data_path = self.config_manager.get_data_path()
+        
         self.data_path = Path(data_path)
         self.data_path.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger(__name__)
 
-        # 支持的彩票类型
-        self.LOTTERY_TYPES = {
-            'ssq': '双色球',
-            'dlt': '大乐透'
-        }
+        # 从配置获取支持的彩票类型
+        self.LOTTERY_TYPES = {}
+        for lottery_type in self.config_manager.get('lottery.supported_types', ['ssq', 'dlt']):
+            config = self.config_manager.get_lottery_config(lottery_type)
+            self.LOTTERY_TYPES[lottery_type] = config.get('name', lottery_type.upper())
 
         # 数据文件路径 (改为 JSON)
         self.data_files = {
-            'ssq': self.data_path / 'ssq_history.json',
-            'dlt': self.data_path / 'dlt_history.json'
+            lottery_type: self.data_path / f'{lottery_type}_history.json'
+            for lottery_type in self.LOTTERY_TYPES.keys()
+        }
+        
+        # 从配置获取日期限制
+        self.date_limit = pd.to_datetime(self.config_manager.get('data.date_limit', '2020-01-01'))
+        
+        # 初始化验证器和清洗器
+        self.validators = {
+            lottery_type: DataValidator(lottery_type) 
+            for lottery_type in self.LOTTERY_TYPES.keys()
+        }
+        self.cleaners = {
+            lottery_type: DataCleaner(lottery_type)
+            for lottery_type in self.LOTTERY_TYPES.keys()
         }
 
     def get_history_data(self, lottery_type: str, periods: Optional[int] = None) -> pd.DataFrame:
@@ -92,8 +110,10 @@ class LotteryDataManager:
                 # --- 添加日期过滤 --- >
                 if 'draw_date' in df.columns:
                      original_count = len(df)
-                     df = df[df['draw_date'] >= DATE_LIMIT].copy() # 使用 .copy() 避免 SettingWithCopyWarning
+                     df = df[df['draw_date'] >= self.date_limit].copy() # 使用 .copy() 避免 SettingWithCopyWarning
                      filtered_count = len(df)
+                     if original_count > filtered_count:
+                         self.logger.info(f"日期过滤: {original_count} -> {filtered_count} 条记录")
                 # <-------------------
 
                 # 转换 'numbers' 列（如果存在且需要的话，但优选直接使用号码列表列）
@@ -121,6 +141,35 @@ class LotteryDataManager:
                      if col in df.columns:
                          df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
                 # <-------------------------------------
+
+                # 数据验证和清洗
+                if not df.empty:
+                    try:
+                        # 先进行数据清洗
+                        df, cleaning_report = self.cleaners[lottery_type].clean_data(
+                            df, auto_fix=True, remove_invalid=True
+                        )
+                        
+                        # 记录清洗结果
+                        if cleaning_report['data_quality']['data_quality_score'] < 95:
+                            self.logger.warning(
+                                f"{lottery_type} 数据质量评分: "
+                                f"{cleaning_report['data_quality']['data_quality_score']:.1f}%"
+                            )
+                        
+                        # 最终验证
+                        validation_result = self.validators[lottery_type].validate(df)
+                        if not validation_result['valid']:
+                            self.logger.warning(
+                                f"{lottery_type} 数据验证发现 {validation_result['summary']['error_count']} 个错误"
+                            )
+                            
+                    except Exception as e:
+                        self.logger.error(f"数据验证和清洗失败: {str(e)}")
+
+                # 为分析器添加展开的号码列
+                if not df.empty:
+                    df = self._expand_number_columns(df, lottery_type)
 
                 if periods:
                     df = df.head(periods)
@@ -204,19 +253,28 @@ class LotteryDataManager:
             self.logger.error(f"更新数据失败: {str(e)}", exc_info=True) # 打印 traceback
             return False
 
-    def _fetch_online_data_as_list(self, lottery_type: str, page_size: int = 30) -> Optional[List[Dict]]:
-        """获取在线数据并直接返回解析后的字典列表 (参考旧代码)
+    def _fetch_online_data_as_list(self, lottery_type: str, page_size: int = None) -> Optional[List[Dict]]:
+        """获取在线数据并直接返回解析后的字典列表
 
         Args:
             lottery_type: 彩票类型 ('ssq'/'dlt')
-            page_size: 获取的记录条数，默认为30
+            page_size: 获取的记录条数，如果为None则使用配置中的默认值
 
         Returns:
             包含最新数据的字典列表，获取失败则返回 None
         """
+        # 从配置获取参数
+        if page_size is None:
+            page_size = self.config_manager.get('api.page_size', 30)
+        
+        max_pages = self.config_manager.get('api.max_pages', 100)
+        
+        # 获取网络客户端
+        network_client = get_network_client()
+        
         if lottery_type == 'ssq':
             # 使用福彩网API获取双色球数据
-            base_url = "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice"
+            base_url = self.config_manager.get('api.ssq_url')
             params = {
                 "name": "ssq",
                 "pageNo": "1",
@@ -224,18 +282,14 @@ class LotteryDataManager:
                 "systemType": "PC"
             }
 
-            # 添加随机User-Agent，避免被识别为爬虫
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                 "Referer": "https://www.cwl.gov.cn/",
                 "Accept": "application/json, text/javascript, */*; q=0.01",
-                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-                "Connection": "keep-alive",
                 "Origin": "https://www.cwl.gov.cn"
             }
         elif lottery_type == 'dlt':
-            # 使用体彩网API获取大乐透数据，但使用更新的参数和错误处理
-            base_url = "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry"
+            # 使用体彩网API获取大乐透数据
+            base_url = self.config_manager.get('api.dlt_url')
             params = {
                 "gameNo": "85",
                 "provinceId": "0",
@@ -244,10 +298,7 @@ class LotteryDataManager:
                 "pageNo": "1"
             }
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                'Connection': 'keep-alive',
                 'Referer': 'https://www.sporttery.cn/',
                 'Origin': 'https://www.sporttery.cn',
                 'Cache-Control': 'no-cache',
@@ -258,9 +309,7 @@ class LotteryDataManager:
             return None
 
         try:
-            response = requests.get(base_url, params=params, headers=headers, timeout=20)
-            response.raise_for_status()
-            data = response.json()
+            data = network_client.get_json(base_url, params=params, headers=headers)
 
             extracted_data_list = []
             if lottery_type == 'ssq':
@@ -268,16 +317,13 @@ class LotteryDataManager:
                 page_no = 1
                 total_pages = 1 # 初始假设至少有1页
                 all_ssq_items = []
-                max_pages_to_fetch = 100 # 设置一个最大页数限制，防止无限循环
                 fetch_delay = 1 # 每页请求间隔秒数
                 stop_fetching = False # 标记是否因日期过早而停止
 
-                while page_no <= total_pages and page_no <= max_pages_to_fetch:
+                while page_no <= total_pages and page_no <= max_pages:
                     params['pageNo'] = str(page_no)
                     try:
-                        response = requests.get(base_url, params=params, headers=headers, timeout=20)
-                        response.raise_for_status()
-                        data = response.json()
+                        data = network_client.get_json(base_url, params=params, headers=headers)
 
                         if data.get('state') == 0 and 'result' in data:
                             page_items = data['result']
@@ -292,7 +338,7 @@ class LotteryDataManager:
                                  last_item_date_str = last_item_date_raw.split('(')[0] if '(' in last_item_date_raw else last_item_date_raw
                                  try:
                                      last_item_dt = pd.to_datetime(last_item_date_str)
-                                     if last_item_dt < DATE_LIMIT:
+                                     if last_item_dt < self.date_limit:
                                           stop_fetching = True
                                  except ValueError:
                                       self.logger.warning(f"SSQ 无法解析页面 {page_no} 最后一条记录的日期: {last_item_date_str}")
@@ -306,7 +352,7 @@ class LotteryDataManager:
 
                             page_no += 1
                             # 添加延时防止请求过快
-                            if page_no <= total_pages and page_no <= max_pages_to_fetch and not stop_fetching:
+                            if page_no <= total_pages and page_no <= max_pages and not stop_fetching:
                                  time.sleep(fetch_delay)
                             elif stop_fetching:
                                  break # 如果日期过早，跳出循环
@@ -315,10 +361,10 @@ class LotteryDataManager:
                             self.logger.warning(f"在线获取 SSQ 数据失败 (Page {page_no}): state={data.get('state')}, message={data.get('message')}")
                             break # 单页失败则停止
 
-                    except requests.exceptions.RequestException as e:
+                    except (NetworkError, TimeoutError, ConnectionError, HTTPError) as e:
                         self.logger.error(f"获取 SSQ 第 {page_no} 页网络请求失败: {str(e)}")
                         break # 网络错误则停止
-                    except (json.JSONDecodeError, KeyError, Exception) as e:
+                    except (ValueError, KeyError, Exception) as e:
                         self.logger.error(f"解析 SSQ 第 {page_no} 页数据或发生其他错误: {str(e)}", exc_info=True)
                         break # 解析错误则停止
                 # <--- SSQ 分页结束 ---
@@ -349,7 +395,7 @@ class LotteryDataManager:
                         # --- 添加日期检查 (虽然分页处已检查，这里再加一层保险) --- >
                         try:
                             draw_dt = pd.to_datetime(draw_date)
-                            if draw_dt < DATE_LIMIT:
+                            if draw_dt < self.date_limit:
                                  continue
                         except ValueError:
                              self.logger.warning(f"SSQ 期号 {draw_num} 日期格式无法解析: {draw_date}，已跳过。")
@@ -396,16 +442,13 @@ class LotteryDataManager:
                 page_no = 1
                 total_pages = 1 # 初始假设至少有1页
                 all_dlt_items = []
-                max_pages_to_fetch = 100 # 设置一个最大页数限制，防止无限循环
                 fetch_delay = 1 # 每页请求间隔秒数
                 stop_fetching = False # 标记是否因日期过早而停止
 
-                while page_no <= total_pages and page_no <= max_pages_to_fetch:
+                while page_no <= total_pages and page_no <= max_pages:
                     params['pageNo'] = str(page_no)
                     try:
-                        response = requests.get(base_url, params=params, headers=headers, timeout=20)
-                        response.raise_for_status()
-                        data = response.json()
+                        data = network_client.get_json(base_url, params=params, headers=headers)
 
                         if data.get('success') and 'value' in data and 'list' in data['value']:
                             page_items = data['value']['list']
@@ -419,7 +462,7 @@ class LotteryDataManager:
                                  last_item_date_str = page_items[-1].get('lotteryDrawTime', '').split()[0]
                                  try:
                                      last_item_dt = pd.to_datetime(last_item_date_str)
-                                     if last_item_dt < DATE_LIMIT:
+                                     if last_item_dt < self.date_limit:
                                           stop_fetching = True
                                  except ValueError:
                                       self.logger.warning(f"DLT 无法解析页面 {page_no} 最后一条记录的日期: {last_item_date_str}")
@@ -434,7 +477,7 @@ class LotteryDataManager:
 
                             page_no += 1
                             # 添加延时防止请求过快
-                            if page_no <= total_pages and page_no <= max_pages_to_fetch and not stop_fetching:
+                            if page_no <= total_pages and page_no <= max_pages and not stop_fetching:
                                  time.sleep(fetch_delay)
                             elif stop_fetching:
                                  break # 如果日期过早，跳出循环
@@ -443,10 +486,10 @@ class LotteryDataManager:
                             self.logger.warning(f"在线获取 DLT 数据失败 (Page {page_no}): success={data.get('success')}, message={data.get('message')}")
                             break # 单页失败则停止
 
-                    except requests.exceptions.RequestException as e:
+                    except (NetworkError, TimeoutError, ConnectionError, HTTPError) as e:
                         self.logger.error(f"获取 DLT 第 {page_no} 页网络请求失败: {str(e)}")
                         break # 网络错误则停止
-                    except (json.JSONDecodeError, KeyError, Exception) as e:
+                    except (ValueError, KeyError, Exception) as e:
                         self.logger.error(f"解析 DLT 第 {page_no} 页数据或发生其他错误: {str(e)}", exc_info=True)
                         break # 解析错误则停止
                 # <--- DLT 分页结束 ---
@@ -523,13 +566,11 @@ class LotteryDataManager:
 
             return extracted_data_list
 
-        except requests.exceptions.RequestException as e:
+        except (NetworkError, TimeoutError, ConnectionError, HTTPError) as e:
             self.logger.error(f"获取 {lottery_type} 在线数据网络请求失败: {str(e)}")
             return None # 网络错误，获取失败
-        except (json.JSONDecodeError, KeyError, Exception) as e:
+        except (ValueError, KeyError, Exception) as e:
             self.logger.error(f"解析 {lottery_type} 在线数据或发生其他错误: {str(e)}", exc_info=True)
-            if 'response' in locals():
-                 self.logger.debug(f"原始响应内容: {response.text[:500]}...")
             return None # 解析错误，获取失败
 
     def get_issue_data(self, lottery_type: str, issue: str) -> Optional[Dict]:
@@ -725,6 +766,134 @@ class LotteryDataManager:
             return False
 
         return True
+
+    def validate_data(self, lottery_type: str, data: pd.DataFrame = None) -> Dict[str, Any]:
+        """验证数据质量
+        
+        Args:
+            lottery_type: 彩票类型
+            data: 要验证的数据，如果为None则验证历史数据
+            
+        Returns:
+            验证报告
+        """
+        if lottery_type not in self.LOTTERY_TYPES:
+            raise ValueError(f"不支持的彩票类型: {lottery_type}")
+        
+        try:
+            if data is None:
+                data = self.get_history_data(lottery_type)
+            
+            if data.empty:
+                return {
+                    'valid': False,
+                    'message': '没有数据可供验证',
+                    'total_issues': 0,
+                    'errors': [],
+                    'warnings': [],
+                    'infos': []
+                }
+            
+            # 执行验证
+            validation_result = self.validators[lottery_type].validate(data)
+            
+            # 添加数据统计信息
+            validation_result['data_stats'] = {
+                'total_records': len(data),
+                'date_range': {
+                    'start': data['draw_date'].min().strftime('%Y-%m-%d') if 'draw_date' in data.columns else None,
+                    'end': data['draw_date'].max().strftime('%Y-%m-%d') if 'draw_date' in data.columns else None
+                },
+                'latest_issue': data['draw_num'].iloc[0] if 'draw_num' in data.columns and not data.empty else None
+            }
+            
+            return validation_result
+            
+        except Exception as e:
+            self.logger.error(f"数据验证失败: {str(e)}", exc_info=True)
+            return {
+                'valid': False,
+                'message': f'验证过程出错: {str(e)}',
+                'total_issues': 1,
+                'errors': [{'rule': 'validation_error', 'message': str(e)}],
+                'warnings': [],
+                'infos': []
+            }
+    
+    def clean_data(self, lottery_type: str, data: pd.DataFrame = None, 
+                   auto_fix: bool = True, remove_invalid: bool = True) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+        """清洗数据
+        
+        Args:
+            lottery_type: 彩票类型
+            data: 要清洗的数据，如果为None则清洗历史数据
+            auto_fix: 是否自动修复
+            remove_invalid: 是否移除无效记录
+            
+        Returns:
+            (清洗后的数据, 清洗报告)
+        """
+        if lottery_type not in self.LOTTERY_TYPES:
+            raise ValueError(f"不支持的彩票类型: {lottery_type}")
+        
+        try:
+            if data is None:
+                data = self.get_history_data(lottery_type)
+            
+            if data.empty:
+                return data, {
+                    'cleaning_stats': {'total_records': 0, 'cleaned_records': 0},
+                    'message': '没有数据可供清洗'
+                }
+            
+            # 执行清洗
+            cleaned_data, cleaning_report = self.cleaners[lottery_type].clean_data(
+                data, auto_fix=auto_fix, remove_invalid=remove_invalid
+            )
+            
+            return cleaned_data, cleaning_report
+            
+        except Exception as e:
+            self.logger.error(f"数据清洗失败: {str(e)}", exc_info=True)
+            return data, {
+                'cleaning_stats': {'total_records': len(data), 'cleaned_records': 0},
+                'error': str(e)
+            }
+
+    def _expand_number_columns(self, df: pd.DataFrame, lottery_type: str) -> pd.DataFrame:
+        """将列表格式的号码展开为单独的列，供分析器使用"""
+        try:
+            if lottery_type == 'ssq':
+                # 展开红球号码
+                if 'red_numbers' in df.columns:
+                    red_expanded = pd.DataFrame(df['red_numbers'].tolist(), 
+                                              columns=[f'red_{i+1}' for i in range(6)],
+                                              index=df.index)
+                    df = pd.concat([df, red_expanded], axis=1)
+                
+                # 蓝球已经是单个数字，重命名即可
+                if 'blue_number' in df.columns:
+                    df['blue_1'] = df['blue_number']
+                    
+            elif lottery_type == 'dlt':
+                # 展开前区号码
+                if 'front_numbers' in df.columns:
+                    front_expanded = pd.DataFrame(df['front_numbers'].tolist(),
+                                                columns=[f'front_{i+1}' for i in range(5)],
+                                                index=df.index)
+                    df = pd.concat([df, front_expanded], axis=1)
+                
+                # 展开后区号码
+                if 'back_numbers' in df.columns:
+                    back_expanded = pd.DataFrame(df['back_numbers'].tolist(),
+                                               columns=[f'back_{i+1}' for i in range(2)],
+                                               index=df.index)
+                    df = pd.concat([df, back_expanded], axis=1)
+                    
+        except Exception as e:
+            self.logger.error(f"展开号码列失败: {e}")
+            
+        return df
 
     def get_statistics(self, lottery_type: str, start_date: Optional[str] = None) -> Dict[str, Any]:
         """获取统计数据

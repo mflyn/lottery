@@ -190,13 +190,19 @@ class FeatureGenerator:
         
         try:
             # 1. 频率特征
-            features.update(self._calculate_frequency_features(data))
+            freq_features = self._calculate_frequency_features(data)
+            for key, series in freq_features.items():
+                features[key] = series
             
             # 2. 趋势特征
-            features.update(self._calculate_trend_features(data))
+            trend_features = self._calculate_trend_features(data)
+            for key, series in trend_features.items():
+                features[key] = series
             
             # 3. 波动特征
-            features.update(self._calculate_volatility_features(data))
+            volatility_features = self._calculate_volatility_features(data)
+            for key, series in volatility_features.items():
+                features[key] = series
             
             return features
             
@@ -237,13 +243,19 @@ class FeatureGenerator:
         
         try:
             # 1. 日期特征
-            features.update(self._calculate_date_features(data))
+            date_features = self._calculate_date_features(data)
+            for key, series in date_features.items():
+                features[key] = series
             
             # 2. 周期性特征
-            features.update(self._calculate_periodic_features(data))
+            periodic_features = self._calculate_periodic_features(data)
+            for key, series in periodic_features.items():
+                features[key] = series
             
             # 3. 时序特征
-            features.update(self._calculate_sequence_features(data))
+            sequence_features = self._calculate_sequence_features(data)
+            for key, series in sequence_features.items():
+                features[key] = series
             
             return features
             
@@ -286,16 +298,24 @@ class FeatureGenerator:
             features = pd.DataFrame(index=data.index)
             
             # 1. 基础分布模式
-            features.update(self._calculate_distribution_patterns(data))
+            distribution_features = self._calculate_distribution_patterns(data)
+            for key, series in distribution_features.items():
+                features[key] = series
             
             # 2. 连号模式
-            features.update(self._calculate_consecutive_patterns(data))
+            consecutive_features = self._calculate_consecutive_patterns(data)
+            for key, series in consecutive_features.items():
+                features[key] = series
             
             # 3. 重复模式
-            features.update(self._calculate_repeat_patterns(data))
+            repeat_features = self._calculate_repeat_patterns(data)
+            for key, series in repeat_features.items():
+                features[key] = series
             
             # 4. 组合模式
-            features.update(self._calculate_combination_patterns(data))
+            combination_features = self._calculate_combination_patterns(data)
+            for key, series in combination_features.items():
+                features[key] = series
             
             return features
             
@@ -359,15 +379,18 @@ class FeatureGenerator:
             
             # 2. 区间组合特征
             red_intervals = self._calculate_interval_features(red_numbers)
-            features.update(red_intervals)
+            for key, series in red_intervals.items():
+                features[key] = series
             
             # 3. 数字特性组合
             number_features = self._calculate_number_properties(red_numbers)
-            features.update(number_features)
+            for key, series in number_features.items():
+                features[key] = series
             
             # 4. 历史组合特征
             history_features = self._calculate_historical_combinations(red_numbers)
-            features.update(history_features)
+            for key, series in history_features.items():
+                features[key] = series
             
             return features
         
@@ -384,34 +407,63 @@ class FeatureGenerator:
         
         # 红球频率特征
         red_numbers = data[self.red_columns].values
+        red_df = pd.DataFrame(red_numbers, index=data.index)
+        
         for window in windows:
-            # 计算近期出现频率
-            recent_freq = pd.DataFrame(red_numbers).rolling(window).apply(
-                lambda x: len(np.unique(x)) / window
+            # 计算近期出现频率 - 修复计算逻辑
+            def calc_unique_ratio(x):
+                if len(x) == 0:
+                    return 0.0
+                unique_count = len(np.unique(x.dropna()))
+                return unique_count / len(x)
+            
+            recent_freq = red_df.rolling(window, min_periods=1).apply(
+                calc_unique_ratio, raw=False
             ).mean(axis=1)
             features[f'red_freq_{window}'] = recent_freq
             
-            # 计算遗漏值统计
-            missing_counts = pd.DataFrame(red_numbers).rolling(window).apply(
-                lambda x: self.red_range[1] - len(np.unique(x))
+            # 计算遗漏值统计 - 修复计算逻辑
+            def calc_missing_ratio(x):
+                if len(x) == 0:
+                    return 0.0
+                unique_count = len(np.unique(x.dropna()))
+                total_possible = self.red_range[1] - self.red_range[0] + 1
+                return (total_possible - unique_count) / total_possible
+            
+            missing_ratio = red_df.rolling(window, min_periods=1).apply(
+                calc_missing_ratio, raw=False
             ).mean(axis=1)
-            features[f'red_missing_{window}'] = missing_counts
+            features[f'red_missing_{window}'] = missing_ratio
         
         # 蓝球频率特征
         blue_numbers = data[self.blue_columns].values
+        
         for window in windows:
             if self.lottery_type == 'ssq':
                 # 双色球蓝球频率
-                recent_freq = pd.Series(blue_numbers.flatten()).rolling(window).apply(
-                    lambda x: len(np.unique(x)) / window
-                )
+                blue_series = pd.Series(blue_numbers.flatten(), index=data.index)
+                
+                def calc_blue_freq(x):
+                    if len(x) == 0:
+                        return 0.0
+                    unique_count = len(np.unique(x.dropna()))
+                    return unique_count / len(x)
+                
+                recent_freq = blue_series.rolling(window, min_periods=1).apply(calc_blue_freq)
                 features[f'blue_freq_{window}'] = recent_freq
             else:
                 # 大乐透蓝球频率
-                recent_freq = pd.DataFrame(blue_numbers).rolling(window).apply(
-                    lambda x: len(np.unique(x)) / window
+                blue_df = pd.DataFrame(blue_numbers, index=data.index)
+                recent_freq = blue_df.rolling(window, min_periods=1).apply(
+                    calc_unique_ratio, raw=False
                 ).mean(axis=1)
                 features[f'back_freq_{window}'] = recent_freq
+        
+        # 确保所有特征都有相同的索引
+        for key, series in features.items():
+            if len(series) != len(data):
+                # 如果长度不匹配，重新索引
+                features[key] = series.reindex(data.index, fill_value=0.0)
         
         return features
 
@@ -424,23 +476,25 @@ class FeatureGenerator:
         red_sums = data[self.red_columns].sum(axis=1)
         for window in windows:
             # 移动平均
-            features[f'red_ma_{window}'] = red_sums.rolling(window).mean()
+            features[f'red_ma_{window}'] = red_sums.rolling(window, min_periods=1).mean()
             # 移动标准差
-            features[f'red_std_{window}'] = red_sums.rolling(window).std()
+            features[f'red_std_{window}'] = red_sums.rolling(window, min_periods=1).std().fillna(0)
             # 移动极差
-            features[f'red_range_{window}'] = red_sums.rolling(window).max() - red_sums.rolling(window).min()
+            features[f'red_range_{window}'] = (red_sums.rolling(window, min_periods=1).max() - 
+                                             red_sums.rolling(window, min_periods=1).min()).fillna(0)
         
         # 蓝球趋势特征
         if self.lottery_type == 'ssq':
             blue_numbers = data[self.blue_columns].values.flatten()
+            blue_series = pd.Series(blue_numbers, index=data.index)
             for window in windows:
-                features[f'blue_ma_{window}'] = pd.Series(blue_numbers).rolling(window).mean()
-                features[f'blue_std_{window}'] = pd.Series(blue_numbers).rolling(window).std()
+                features[f'blue_ma_{window}'] = blue_series.rolling(window, min_periods=1).mean()
+                features[f'blue_std_{window}'] = blue_series.rolling(window, min_periods=1).std().fillna(0)
         else:
             back_sums = data[self.blue_columns].sum(axis=1)
             for window in windows:
-                features[f'back_ma_{window}'] = back_sums.rolling(window).mean()
-                features[f'back_std_{window}'] = back_sums.rolling(window).std()
+                features[f'back_ma_{window}'] = back_sums.rolling(window, min_periods=1).mean()
+                features[f'back_std_{window}'] = back_sums.rolling(window, min_periods=1).std().fillna(0)
         
         return features
 
@@ -452,36 +506,43 @@ class FeatureGenerator:
         # 红球波动特征
         red_sums = data[self.red_columns].sum(axis=1)
         for window in windows:
-            # 方差比
-            var_ratio = (red_sums.rolling(window).var() / 
-                        red_sums.rolling(window).mean() ** 2)
-            features[f'red_var_ratio_{window}'] = var_ratio
+            # 方差比 - 添加安全检查
+            rolling_var = red_sums.rolling(window, min_periods=1).var()
+            rolling_mean = red_sums.rolling(window, min_periods=1).mean()
+            var_ratio = rolling_var / (rolling_mean ** 2 + 1e-8)  # 避免除零
+            features[f'red_var_ratio_{window}'] = var_ratio.fillna(0)
             
-            # 变异系数
-            cv = (red_sums.rolling(window).std() / 
-                  red_sums.rolling(window).mean())
-            features[f'red_cv_{window}'] = cv
+            # 变异系数 - 添加安全检查
+            rolling_std = red_sums.rolling(window, min_periods=1).std()
+            cv = rolling_std / (rolling_mean + 1e-8)  # 避免除零
+            features[f'red_cv_{window}'] = cv.fillna(0)
             
-            # 波动率
-            volatility = (red_sums.rolling(window).max() - red_sums.rolling(window).min()) / red_sums.rolling(window).mean()
-            features[f'red_volatility_{window}'] = volatility
+            # 波动率 - 添加安全检查
+            rolling_max = red_sums.rolling(window, min_periods=1).max()
+            rolling_min = red_sums.rolling(window, min_periods=1).min()
+            volatility = (rolling_max - rolling_min) / (rolling_mean + 1e-8)
+            features[f'red_volatility_{window}'] = volatility.fillna(0)
         
         # 蓝球波动特征
         if self.lottery_type == 'ssq':
             blue_numbers = data[self.blue_columns].values.flatten()
-            blue_series = pd.Series(blue_numbers)
+            blue_series = pd.Series(blue_numbers, index=data.index)
             for window in windows:
-                features[f'blue_var_ratio_{window}'] = (blue_series.rolling(window).var() / 
-                                                       blue_series.rolling(window).mean() ** 2)
-                features[f'blue_cv_{window}'] = (blue_series.rolling(window).std() / 
-                                               blue_series.rolling(window).mean())
+                rolling_var = blue_series.rolling(window, min_periods=1).var()
+                rolling_mean = blue_series.rolling(window, min_periods=1).mean()
+                features[f'blue_var_ratio_{window}'] = (rolling_var / (rolling_mean ** 2 + 1e-8)).fillna(0)
+                
+                rolling_std = blue_series.rolling(window, min_periods=1).std()
+                features[f'blue_cv_{window}'] = (rolling_std / (rolling_mean + 1e-8)).fillna(0)
         else:
             back_sums = data[self.blue_columns].sum(axis=1)
             for window in windows:
-                features[f'back_var_ratio_{window}'] = (back_sums.rolling(window).var() / 
-                                                       back_sums.rolling(window).mean() ** 2)
-                features[f'back_cv_{window}'] = (back_sums.rolling(window).std() / 
-                                               back_sums.rolling(window).mean())
+                rolling_var = back_sums.rolling(window, min_periods=1).var()
+                rolling_mean = back_sums.rolling(window, min_periods=1).mean()
+                features[f'back_var_ratio_{window}'] = (rolling_var / (rolling_mean ** 2 + 1e-8)).fillna(0)
+                
+                rolling_std = back_sums.rolling(window, min_periods=1).std()
+                features[f'back_cv_{window}'] = (rolling_std / (rolling_mean + 1e-8)).fillna(0)
         
         return features
 
@@ -582,17 +643,17 @@ class FeatureGenerator:
         for window in windows:
             # 红球趋势
             features[f'red_trend_{window}'] = (
-                red_sums.rolling(window).mean().pct_change()
+                red_sums.rolling(window, min_periods=1).mean().pct_change().fillna(0)
             )
             
             # 蓝球趋势
             if self.lottery_type == 'ssq':
                 features[f'blue_trend_{window}'] = (
-                    blue_series.rolling(window).mean().pct_change()
+                    blue_series.rolling(window, min_periods=1).mean().pct_change().fillna(0)
                 )
             else:
                 features[f'back_trend_{window}'] = (
-                    back_sums.rolling(window).mean().pct_change()
+                    back_sums.rolling(window, min_periods=1).mean().pct_change().fillna(0)
                 )
         
         return features
@@ -662,17 +723,27 @@ class FeatureGenerator:
         else:
             red_numbers = data[self.red_columns].values
         
-        consecutive_info = np.array([get_consecutive_info(row) for row in red_numbers])
+        # 处理空数据情况
+        if len(red_numbers) == 0:
+            features['consecutive_count'] = pd.Series([], dtype=int)
+            features['max_consecutive_length'] = pd.Series([], dtype=int)
+            features['has_consecutive'] = pd.Series([], dtype=int)
+            for i in range(5):
+                features[f'consecutive_pos_{i+1}'] = pd.Series([], dtype=int)
+            return features
         
-        features['consecutive_count'] = consecutive_info[:, 0]
-        features['max_consecutive_length'] = consecutive_info[:, 1]
-        features['has_consecutive'] = (consecutive_info[:, 0] > 0).astype(int)
+        consecutive_info = [get_consecutive_info(row) for row in red_numbers]
+        
+        # 分别提取各个特征
+        features['consecutive_count'] = pd.Series([info[0] for info in consecutive_info], index=data.index)
+        features['max_consecutive_length'] = pd.Series([info[1] for info in consecutive_info], index=data.index)
+        features['has_consecutive'] = pd.Series([(info[0] > 0) for info in consecutive_info], index=data.index, dtype=int)
         
         # 连号位置特征
         for i in range(5):  # 最多5个连号位置
-            features[f'consecutive_pos_{i+1}'] = [
-                1 if i < len(pos) else 0 for pos in consecutive_info[:, 2]
-            ]
+            features[f'consecutive_pos_{i+1}'] = pd.Series([
+                1 if i < len(info[2]) else 0 for info in consecutive_info
+            ], index=data.index, dtype=int)
         
         return features
 
@@ -691,25 +762,26 @@ class FeatureGenerator:
             else:
                 red_numbers = data[self.red_columns].values
             
-            features[f'red_repeat_{look_back}'] = [
+            repeat_values = [
                 calculate_repeats(red_numbers[i], red_numbers[i-look_back])
                 if i >= look_back else 0
                 for i in range(len(data))
             ]
+            features[f'red_repeat_{look_back}'] = pd.Series(repeat_values, index=data.index)
             
             # 蓝球重复（双色球）或后区重复（大乐透）
             if self.lottery_type == 'ssq':
                 blue_numbers = data[self.blue_columns].values.flatten()
-                features[f'blue_repeat_{look_back}'] = (
-                    blue_numbers == np.roll(blue_numbers, look_back)
-                ).astype(int)
+                blue_repeat = (blue_numbers == np.roll(blue_numbers, look_back)).astype(int)
+                features[f'blue_repeat_{look_back}'] = pd.Series(blue_repeat, index=data.index)
             else:
                 back_numbers = data[self.blue_columns].values
-                features[f'back_repeat_{look_back}'] = [
+                back_repeat_values = [
                     calculate_repeats(back_numbers[i], back_numbers[i-look_back])
                     if i >= look_back else 0
                     for i in range(len(data))
                 ]
+                features[f'back_repeat_{look_back}'] = pd.Series(back_repeat_values, index=data.index)
         
         # 计算热温冷号分布
         def calculate_number_temperature(numbers, history_numbers, hot_threshold=3, cold_threshold=8):
@@ -726,15 +798,32 @@ class FeatureGenerator:
         
         # 计算最近30期的热温冷分布
         window = 30
+        red_hot_counts = []
+        red_warm_counts = []
+        red_cold_counts = []
+        
         for i in range(len(data)):
             start_idx = max(0, i - window)
-            if self.lottery_type == 'ssq':
+            if i == 0 or start_idx == i:  # 第一期或没有历史数据
+                red_hot_counts.append(0)
+                red_warm_counts.append(0)
+                red_cold_counts.append(0)
+            else:
                 red_history = data.iloc[start_idx:i][self.red_columns].values
                 current_red = data.iloc[i][self.red_columns].values
-                hot, warm, cold = calculate_number_temperature(current_red, red_history)
-                features.setdefault('red_hot_count', []).append(hot)
-                features.setdefault('red_warm_count', []).append(warm)
-                features.setdefault('red_cold_count', []).append(cold)
+                if len(red_history) > 0:
+                    hot, warm, cold = calculate_number_temperature(current_red, red_history)
+                    red_hot_counts.append(hot)
+                    red_warm_counts.append(warm)
+                    red_cold_counts.append(cold)
+                else:
+                    red_hot_counts.append(0)
+                    red_warm_counts.append(0)
+                    red_cold_counts.append(0)
+        
+        features['red_hot_count'] = pd.Series(red_hot_counts, index=data.index)
+        features['red_warm_count'] = pd.Series(red_warm_counts, index=data.index)
+        features['red_cold_count'] = pd.Series(red_cold_counts, index=data.index)
         
         return features
 
@@ -755,32 +844,36 @@ class FeatureGenerator:
             diffs = np.diff(sorted_nums)
             return np.mean(diffs)
         
-        features['red_ac_value'] = [calculate_ac_value(row) for row in red_data]
+        features['red_ac_value'] = pd.Series([calculate_ac_value(row) for row in red_data], index=data.index)
         if self.lottery_type == 'dlt':
-            features['back_ac_value'] = [calculate_ac_value(row) for row in blue_data]
+            features['back_ac_value'] = pd.Series([calculate_ac_value(row) for row in blue_data], index=data.index)
         
         # 和值特征
-        features['red_sum'] = np.sum(red_data, axis=1)
-        features['red_sum_mod_10'] = features['red_sum'] % 10
-        features['red_sum_ones'] = features['red_sum'] % 10
-        features['red_sum_tens'] = (features['red_sum'] // 10) % 10
+        red_sum = np.sum(red_data, axis=1)
+        features['red_sum'] = pd.Series(red_sum, index=data.index)
+        features['red_sum_mod_10'] = pd.Series(red_sum % 10, index=data.index)
+        features['red_sum_ones'] = pd.Series(red_sum % 10, index=data.index)
+        features['red_sum_tens'] = pd.Series((red_sum // 10) % 10, index=data.index)
         
         if self.lottery_type == 'dlt':
-            features['back_sum'] = np.sum(blue_data, axis=1)
-            features['total_sum'] = features['red_sum'] + features['back_sum']
+            back_sum = np.sum(blue_data, axis=1)
+            features['back_sum'] = pd.Series(back_sum, index=data.index)
+            features['total_sum'] = pd.Series(red_sum + back_sum, index=data.index)
         else:
-            features['total_sum'] = features['red_sum'] + blue_data
+            features['total_sum'] = pd.Series(red_sum + blue_data, index=data.index)
         
         # 跨度特征
-        features['red_span'] = np.max(red_data, axis=1) - np.min(red_data, axis=1)
+        red_span = np.max(red_data, axis=1) - np.min(red_data, axis=1)
+        features['red_span'] = pd.Series(red_span, index=data.index)
         if self.lottery_type == 'dlt':
-            features['back_span'] = np.max(blue_data, axis=1) - np.min(blue_data, axis=1)
+            back_span = np.max(blue_data, axis=1) - np.min(blue_data, axis=1)
+            features['back_span'] = pd.Series(back_span, index=data.index)
         
         # 号码间隔特征
         sorted_red = np.sort(red_data, axis=1)
-        features['red_avg_gap'] = np.mean(np.diff(sorted_red, axis=1), axis=1)
-        features['red_max_gap'] = np.max(np.diff(sorted_red, axis=1), axis=1)
-        features['red_min_gap'] = np.min(np.diff(sorted_red, axis=1), axis=1)
+        features['red_avg_gap'] = pd.Series(np.mean(np.diff(sorted_red, axis=1), axis=1), index=data.index)
+        features['red_max_gap'] = pd.Series(np.max(np.diff(sorted_red, axis=1), axis=1), index=data.index)
+        features['red_min_gap'] = pd.Series(np.min(np.diff(sorted_red, axis=1), axis=1), index=data.index)
         
         return features
 
@@ -797,23 +890,24 @@ class FeatureGenerator:
         # 计算每个区间的号码数量
         for i, (start, end) in enumerate(intervals):
             interval_count = np.sum((numbers >= start) & (numbers <= end), axis=1)
-            features[f'interval_{i+1}_count'] = interval_count
+            features[f'interval_{i+1}_count'] = pd.Series(interval_count, index=range(len(numbers)))
         
         # 计算区间组合模式
-        interval_pattern = ''
+        interval_patterns = []
         for row in numbers:
             pattern = []
             for start, end in intervals:
                 count = np.sum((row >= start) & (row <= end))
                 pattern.append(str(count))
-            interval_pattern += '_'.join(pattern) + ','
+            interval_patterns.append('_'.join(pattern))
         
-        features['interval_pattern'] = interval_pattern.split(',')[:-1]
+        features['interval_pattern'] = pd.Series(interval_patterns, index=range(len(numbers)))
         
         # 计算区间平衡性
-        mean_counts = np.mean([features[f'interval_{i+1}_count'] for i in range(len(intervals))], axis=0)
-        std_counts = np.std([features[f'interval_{i+1}_count'] for i in range(len(intervals))], axis=0)
-        features['interval_balance'] = mean_counts / (std_counts + 1e-6)
+        interval_counts = [features[f'interval_{i+1}_count'] for i in range(len(intervals))]
+        mean_counts = np.mean(interval_counts, axis=0)
+        std_counts = np.std(interval_counts, axis=0)
+        features['interval_balance'] = pd.Series(mean_counts / (std_counts + 1e-6), index=range(len(numbers)))
         
         return features
 
@@ -824,21 +918,21 @@ class FeatureGenerator:
         # 奇偶特征
         odd_counts = np.sum(numbers % 2 == 1, axis=1)
         even_counts = numbers.shape[1] - odd_counts
-        features['odd_even_ratio'] = odd_counts / even_counts
-        features['odd_even_pattern'] = [f"{int(odd)}_{int(even)}" for odd, even in zip(odd_counts, even_counts)]
+        features['odd_even_ratio'] = pd.Series(odd_counts / (even_counts + 1e-8), index=range(len(numbers)))  # 避免除零
+        features['odd_even_pattern'] = pd.Series([f"{int(odd)}_{int(even)}" for odd, even in zip(odd_counts, even_counts)], index=range(len(numbers)))
         
         # 质数特征
         primes = {2,3,5,7,11,13,17,19,23,29,31}
         prime_counts = np.sum(np.isin(numbers, list(primes)), axis=1)
-        features['prime_count'] = prime_counts
-        features['prime_ratio'] = prime_counts / numbers.shape[1]
+        features['prime_count'] = pd.Series(prime_counts, index=range(len(numbers)))
+        features['prime_ratio'] = pd.Series(prime_counts / numbers.shape[1], index=range(len(numbers)))
         
         # 大小特征
         mid_point = self.red_range[1] // 2
         big_counts = np.sum(numbers > mid_point, axis=1)
         small_counts = numbers.shape[1] - big_counts
-        features['big_small_ratio'] = big_counts / small_counts
-        features['big_small_pattern'] = [f"{int(big)}_{int(small)}" for big, small in zip(big_counts, small_counts)]
+        features['big_small_ratio'] = pd.Series(big_counts / (small_counts + 1e-8), index=range(len(numbers)))  # 避免除零
+        features['big_small_pattern'] = pd.Series([f"{int(big)}_{int(small)}" for big, small in zip(big_counts, small_counts)], index=range(len(numbers)))
         
         return features
 
@@ -859,11 +953,11 @@ class FeatureGenerator:
                 max_repeats = max(len(current_set & hist_set) for hist_set in historical_sets)
                 repeat_counts.append(max_repeats)
                 
-            features[f'combination_repeat_{look_back}'] = repeat_counts
+            features[f'combination_repeat_{look_back}'] = pd.Series(repeat_counts, index=range(len(numbers)))
         
         # 计算热门组合
         combination_str = ['_'.join(map(str, row)) for row in numbers]
         combination_counts = pd.Series(combination_str).value_counts()
-        features['combination_frequency'] = [combination_counts.get(comb, 0) for comb in combination_str]
+        features['combination_frequency'] = pd.Series([combination_counts.get(comb, 0) for comb in combination_str], index=range(len(numbers)))
         
         return features

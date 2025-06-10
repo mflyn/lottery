@@ -1,0 +1,84 @@
+{
+  "data": {
+    "data_path": "data",
+    "date_limit": "2020-01-01",
+    "cache_ttl_hours": 24,
+    "max_periods": 1000
+  },
+  "network": {
+    "timeout": 30,
+    "max_retry": 3,
+    "retry_delay": 1,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "verify_ssl": true
+  },
+  "lottery": {
+    "supported_types": [
+      "ssq",
+      "dlt"
+    ],
+    "default_type": "ssq",
+    "ssq": {
+      "name": "双色球",
+      "red_range": [
+        1,
+        33
+      ],
+      "blue_range": [
+        1,
+        16
+      ],
+      "red_count": 6,
+      "blue_count": 1,
+      "basic_price": 2
+    },
+    "dlt": {
+      "name": "大乐透",
+      "front_range": [
+        1,
+        35
+      ],
+      "back_range": [
+        1,
+        12
+      ],
+      "front_count": 5,
+      "back_count": 2,
+      "basic_price": 2,
+      "additional_price": 1
+    }
+  },
+  "ui": {
+    "window_width": 1000,
+    "window_height": 700,
+    "min_width": 800,
+    "min_height": 600,
+    "theme": "default",
+    "font_size": 10,
+    "language": "zh_CN"
+  },
+  "logging": {
+    "level": "INFO",
+    "log_dir": "logs",
+    "max_log_files": 10,
+    "max_log_size_mb": 10
+  },
+  "analysis": {
+    "default_periods": 100,
+    "hot_cold_threshold": 3,
+    "feature_cache_size": 1000
+  },
+  "api": {
+    "ssq_url": "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice",
+    "dlt_url": "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry",
+    "page_size": 30,
+    "max_pages": 100
+  },
+  "_metadata": {
+    "last_updated": "2025-06-10T10:13:06.715155",
+    "version": "1.0"
+  },
+  "test": {
+    "value": "test_data"
+  }
+}
