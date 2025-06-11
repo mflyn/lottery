@@ -10,6 +10,7 @@ import time
 from .config_manager import get_config_manager
 from .network_client import get_network_client, NetworkError, TimeoutError, ConnectionError, HTTPError
 from .validation import DataValidator, DataCleaner, validate_lottery_data, clean_lottery_data
+from .api_parsers import get_parser
 
 class LotteryDataManager:
     """彩票数据管理器"""
@@ -267,311 +268,211 @@ class LotteryDataManager:
         if page_size is None:
             page_size = self.config_manager.get('api.page_size', 30)
         
-        max_pages = self.config_manager.get('api.max_pages', 100)
+        # 获取备选API列表
+        backup_apis = self.config_manager.get(f'api.backup_apis.{lottery_type}', [])
+        
+        # 尝试每个API源
+        for api_index, api_config in enumerate(backup_apis):
+            api_name = api_config.get('name', f'API{api_index + 1}')
+            self.logger.info(f"尝试使用 {api_name} 获取 {lottery_type} 数据...")
+            
+            try:
+                result = self._fetch_from_single_api(api_config, lottery_type, page_size)
+                if result:
+                    self.logger.info(f"成功从 {api_name} 获取到 {len(result)} 条数据")
+                    return result
+                else:
+                    self.logger.warning(f"{api_name} 返回空数据，尝试下一个API源")
+                    
+            except Exception as e:
+                self.logger.error(f"从 {api_name} 获取数据失败: {str(e)}")
+                continue
+        
+        # 所有API都失败了
+        self.logger.error(f"所有 {lottery_type} API源都无法获取数据")
+        return None
+    
+    def _fetch_from_single_api(self, api_config: Dict, lottery_type: str, page_size: int) -> Optional[List[Dict]]:
+        """从单个API源获取数据
+        
+        Args:
+            api_config: API配置
+            lottery_type: 彩票类型
+            page_size: 页面大小
+            
+        Returns:
+            解析后的数据列表
+        """
+        api_type = api_config.get('type', 'unknown')
+        base_url = api_config.get('url')
+        base_params = api_config.get('params', {}).copy()
+        headers = api_config.get('headers', {})
+        
+        if not base_url:
+            self.logger.error(f"API配置缺少URL: {api_config}")
+            return None
         
         # 获取网络客户端
         network_client = get_network_client()
         
-        if lottery_type == 'ssq':
-            # 使用福彩网API获取双色球数据
-            base_url = self.config_manager.get('api.ssq_url')
-            params = {
-                "name": "ssq",
-                "pageNo": "1",
-                "pageSize": str(page_size),
-                "systemType": "PC"
-            }
-
-            headers = {
-                "Referer": "https://www.cwl.gov.cn/",
-                "Accept": "application/json, text/javascript, */*; q=0.01",
-                "Origin": "https://www.cwl.gov.cn"
-            }
-        elif lottery_type == 'dlt':
-            # 使用体彩网API获取大乐透数据
-            base_url = self.config_manager.get('api.dlt_url')
-            params = {
-                "gameNo": "85",
-                "provinceId": "0",
-                "pageSize": str(page_size),
-                "isVerify": "1",
-                "pageNo": "1"
-            }
-            headers = {
-                'Accept': 'application/json, text/plain, */*',
-                'Referer': 'https://www.sporttery.cn/',
-                'Origin': 'https://www.sporttery.cn',
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
-            }
+        # 获取解析器
+        parser = get_parser(api_type)
+        
+        # 根据API类型调整参数
+        if api_type == 'sporttery':
+            return self._fetch_sporttery_data(network_client, parser, base_url, base_params, headers, lottery_type, page_size)
+        elif api_type in ['500wan', 'sina', 'netease']:
+            return self._fetch_simple_api_data(network_client, parser, base_url, base_params, headers, lottery_type, page_size)
+        elif api_type == 'cwl':
+            return self._fetch_cwl_data(network_client, parser, base_url, base_params, headers, lottery_type, page_size)
         else:
-            self.logger.error(f"不支持的彩票类型: {lottery_type}")
+            self.logger.error(f"不支持的API类型: {api_type}")
             return None
-
+    
+    def _fetch_sporttery_data(self, network_client, parser, base_url: str, params: Dict, headers: Dict, 
+                             lottery_type: str, page_size: int) -> Optional[List[Dict]]:
+        """获取体彩网数据（支持分页）"""
+        max_pages = self.config_manager.get('api.max_pages', 100)
+        all_items = []
+        page_no = 1
+        fetch_delay = 1
+        
+        # 更新页面大小参数
+        params['pageSize'] = str(page_size)
+        
+        while page_no <= max_pages:
+            params['pageNo'] = str(page_no)
+            
+            try:
+                data = network_client.get_json(base_url, params=params, headers=headers)
+                parsed_items = parser.parse(data, lottery_type)
+                
+                if not parsed_items:
+                    if page_no == 1:
+                        # 第一页就没数据，可能是API问题
+                        self.logger.warning("体彩网API第一页返回空数据")
+                        return None
+                    else:
+                        # 后续页面没数据，正常结束
+                        break
+                
+                all_items.extend(parsed_items)
+                
+                # 检查日期限制
+                if parsed_items:
+                    last_item_date_str = parsed_items[-1].get('draw_date', '')
+                    try:
+                        last_item_dt = pd.to_datetime(last_item_date_str)
+                        if last_item_dt < self.date_limit:
+                            break
+                    except ValueError:
+                        pass
+                
+                # 检查是否还有更多页面
+                if isinstance(data, dict) and data.get('success'):
+                    total_count = data.get('value', {}).get('total', 0)
+                    page_size_param = int(params.get('pageSize', 30))
+                    if total_count > 0 and page_size_param > 0:
+                        total_pages = (total_count + page_size_param - 1) // page_size_param
+                        if page_no >= total_pages:
+                            break
+                
+                page_no += 1
+                if page_no <= max_pages:
+                    time.sleep(fetch_delay)
+                    
+            except Exception as e:
+                self.logger.error(f"获取体彩网第 {page_no} 页数据失败: {str(e)}")
+                if page_no == 1:
+                    return None  # 第一页失败直接返回
+                else:
+                    break  # 后续页面失败则结束
+        
+        return all_items if all_items else None
+    
+    def _fetch_simple_api_data(self, network_client, parser, base_url: str, params: Dict, headers: Dict,
+                              lottery_type: str, page_size: int) -> Optional[List[Dict]]:
+        """获取简单API数据（单次请求）"""
         try:
-            data = network_client.get_json(base_url, params=params, headers=headers)
-
-            extracted_data_list = []
-            if lottery_type == 'ssq':
-                # --- SSQ 分页获取逻辑 --- >
-                page_no = 1
-                total_pages = 1 # 初始假设至少有1页
-                all_ssq_items = []
-                fetch_delay = 1 # 每页请求间隔秒数
-                stop_fetching = False # 标记是否因日期过早而停止
-
-                while page_no <= total_pages and page_no <= max_pages:
-                    params['pageNo'] = str(page_no)
-                    try:
-                        data = network_client.get_json(base_url, params=params, headers=headers)
-
-                        if data.get('state') == 0 and 'result' in data:
-                            page_items = data['result']
-                            if not page_items and page_no > 1: # 如果不是第一页且返回为空，说明获取完毕
-                                break
-
-                            all_ssq_items.extend(page_items)
-
-                            # --- 添加日期检查，如果本页最旧的数据已早于限制，则停止 --- >
-                            if page_items:
-                                 last_item_date_raw = page_items[-1].get('date', '')
-                                 last_item_date_str = last_item_date_raw.split('(')[0] if '(' in last_item_date_raw else last_item_date_raw
-                                 try:
-                                     last_item_dt = pd.to_datetime(last_item_date_str)
-                                     if last_item_dt < self.date_limit:
-                                          stop_fetching = True
-                                 except ValueError:
-                                      self.logger.warning(f"SSQ 无法解析页面 {page_no} 最后一条记录的日期: {last_item_date_str}")
-                            # <-----------------------------------------------------------
-
-                            # 更新总页数 (只在第一页或 total_pages 仍为初始值时更新)
-                            if page_no == 1 or total_pages == 1:
-                                total_count = data.get('pageCount', 0)
-                                if total_count > 0:
-                                     total_pages = total_count
-
-                            page_no += 1
-                            # 添加延时防止请求过快
-                            if page_no <= total_pages and page_no <= max_pages and not stop_fetching:
-                                 time.sleep(fetch_delay)
-                            elif stop_fetching:
-                                 break # 如果日期过早，跳出循环
-
-                        else:
-                            self.logger.warning(f"在线获取 SSQ 数据失败 (Page {page_no}): state={data.get('state')}, message={data.get('message')}")
-                            break # 单页失败则停止
-
-                    except (NetworkError, TimeoutError, ConnectionError, HTTPError) as e:
-                        self.logger.error(f"获取 SSQ 第 {page_no} 页网络请求失败: {str(e)}")
-                        break # 网络错误则停止
-                    except (ValueError, KeyError, Exception) as e:
-                        self.logger.error(f"解析 SSQ 第 {page_no} 页数据或发生其他错误: {str(e)}", exc_info=True)
-                        break # 解析错误则停止
-                # <--- SSQ 分页结束 ---
-
-                # --- 解析所有获取到的 SSQ items --- >
-                for item in all_ssq_items:
-                     try:
-                        draw_num = item.get('code')
-                        # 处理日期格式，去掉括号中的星期信息
-                        draw_date_raw = item.get('date', '')
-                        draw_date = draw_date_raw.split('(')[0] if '(' in draw_date_raw else draw_date_raw
-                        red_str = item.get('red', '')
-                        blue_str = item.get('blue', '')
-                        # 处理福彩网API返回的号码格式
-                        # 红球和蓝球已经分开返回
-                        red_numbers = [int(n) for n in red_str.split(',')]
-                        blue_number = int(blue_str)
-
-                        # 红球按大小排序
-                        red_numbers = sorted(red_numbers)
-
-                        # 组合成列表
-                        numbers_list = red_numbers + [blue_number]
-
-                        prize_pool_str = item.get('poolmoney', '0')
-                        sales_str = item.get('sales', '0')
-
-                        # --- 添加日期检查 (虽然分页处已检查，这里再加一层保险) --- >
-                        try:
-                            draw_dt = pd.to_datetime(draw_date)
-                            if draw_dt < self.date_limit:
-                                 continue
-                        except ValueError:
-                             self.logger.warning(f"SSQ 期号 {draw_num} 日期格式无法解析: {draw_date}，已跳过。")
-                             continue
-                        # <-------------------
-
-                        if not all([draw_num, draw_date, len(numbers_list) >= 7]):
-                            self.logger.warning(f"SSQ 期号 {draw_num} 数据不完整，已跳过: {item}")
-                            continue
-
-                        # 这里不需要再次转换和排序，因为在前面的代码中已经做了这个操作
-                        red_numbers = numbers_list[:-1]  # 前面的是红球
-                        blue_number = numbers_list[-1]   # 最后一个是蓝球
-
-                        # 号码验证 (参考旧代码)
-                        if (len(red_numbers) != 6 or
-                            not all(1 <= n <= 33 for n in red_numbers) or
-                            not (1 <= blue_number <= 16) or
-                            len(set(red_numbers)) != 6):
-                            self.logger.warning(f"SSQ 期号 {draw_num} 号码验证失败，已跳过: red={red_numbers}, blue={blue_number}")
-                            continue
-
-                        # 获取奖级信息
-                        first_prize_num = item.get('onebonus', '0')  # 一等奖注数
-                        first_prize_amount = item.get('onemoney', '0')  # 一等奖奖金
-
-                        extracted_data_list.append({
-                            'draw_num': draw_num,
-                            'draw_date': draw_date,
-                            'red_numbers': red_numbers, # 直接存储列表
-                            'blue_number': blue_number, # 直接存储数字
-                            'prize_pool': prize_pool_str, # 保持字符串，后续处理
-                            'sales': sales_str,         # 保持字符串，后续处理
-                            'first_prize_num': first_prize_num,
-                            'first_prize_amount': first_prize_amount
-                        })
-                     except (ValueError, TypeError, KeyError, IndexError) as e:
-                         self.logger.error(f"解析 SSQ item {item.get('lotteryDrawNum')} 时出错: {e}", exc_info=True)
-                         continue
-                # <--- 解析结束 ---
-
-            elif lottery_type == 'dlt':
-                # --- DLT 分页获取逻辑 --- >
-                page_no = 1
-                total_pages = 1 # 初始假设至少有1页
-                all_dlt_items = []
-                fetch_delay = 1 # 每页请求间隔秒数
-                stop_fetching = False # 标记是否因日期过早而停止
-
-                while page_no <= total_pages and page_no <= max_pages:
-                    params['pageNo'] = str(page_no)
-                    try:
-                        data = network_client.get_json(base_url, params=params, headers=headers)
-
-                        if data.get('success') and 'value' in data and 'list' in data['value']:
-                            page_items = data['value']['list']
-                            if not page_items and page_no > 1: # 如果不是第一页且返回为空，说明获取完毕
-                                break
-
-                            all_dlt_items.extend(page_items)
-
-                            # --- 添加日期检查，如果本页最旧的数据已早于限制，则停止 --- >
-                            if page_items:
-                                 last_item_date_str = page_items[-1].get('lotteryDrawTime', '').split()[0]
-                                 try:
-                                     last_item_dt = pd.to_datetime(last_item_date_str)
-                                     if last_item_dt < self.date_limit:
-                                          stop_fetching = True
-                                 except ValueError:
-                                      self.logger.warning(f"DLT 无法解析页面 {page_no} 最后一条记录的日期: {last_item_date_str}")
-                            # <-----------------------------------------------------------
-
-                            # 更新总页数 (只在第一页或 total_pages 仍为初始值时更新)
-                            if page_no == 1 or total_pages == 1:
-                                total_count = data['value'].get('total', 0)
-                                page_size_from_param = int(params.get('pageSize', 30))
-                                if total_count > 0 and page_size_from_param > 0:
-                                     total_pages = (total_count + page_size_from_param - 1) // page_size_from_param
-
-                            page_no += 1
-                            # 添加延时防止请求过快
-                            if page_no <= total_pages and page_no <= max_pages and not stop_fetching:
-                                 time.sleep(fetch_delay)
-                            elif stop_fetching:
-                                 break # 如果日期过早，跳出循环
-
-                        else:
-                            self.logger.warning(f"在线获取 DLT 数据失败 (Page {page_no}): success={data.get('success')}, message={data.get('message')}")
-                            break # 单页失败则停止
-
-                    except (NetworkError, TimeoutError, ConnectionError, HTTPError) as e:
-                        self.logger.error(f"获取 DLT 第 {page_no} 页网络请求失败: {str(e)}")
-                        break # 网络错误则停止
-                    except (ValueError, KeyError, Exception) as e:
-                        self.logger.error(f"解析 DLT 第 {page_no} 页数据或发生其他错误: {str(e)}", exc_info=True)
-                        break # 解析错误则停止
-                # <--- DLT 分页结束 ---
-
-                # --- 解析所有获取到的 DLT items --- >
-                for item in all_dlt_items:
-                     try:
-                        draw_num = item.get('lotteryDrawNum')
-                        draw_date = item.get('lotteryDrawTime', '').split()[0] # 取日期部分
-                        numbers_str = item.get('lotteryDrawResult', '')
-                        numbers_list = numbers_str.split()
-                        prize_pool_str = item.get('poolBalanceAfterdraw', '0')
-                        sales_str = item.get('totalSaleAmount', '0')
-
-                        # 解析前区和后区号码
-                        if len(numbers_list) >= 7:
-                            front_numbers = sorted([int(n) for n in numbers_list[:5]])
-                            back_numbers = sorted([int(n) for n in numbers_list[5:7]])
-                        else:
-                            self.logger.warning(f"DLT 期号 {draw_num} 号码数量不足，已跳过: {numbers_list}")
-                            continue
-
-                        # --- 添加日期检查 (虽然分页处已检查，这里再加一层保险) --- >
-                        try:
-                            draw_dt = pd.to_datetime(draw_date)
-                            if draw_dt < DATE_LIMIT:
-                                 continue
-                        except ValueError:
-                             self.logger.warning(f"DLT 期号 {draw_num} 日期格式无法解析: {draw_date}，已跳过。")
-                             continue
-                        # <-------------------
-
-                        if not all([draw_num, draw_date, len(front_numbers) == 5, len(back_numbers) == 2]):
-                            self.logger.warning(f"DLT 期号 {draw_num} 数据不完整，已跳过: {item}")
-                            continue
-
-                        # 号码验证 (参考旧代码)
-                        if (len(front_numbers) != 5 or len(back_numbers) != 2 or
-                            not all(1 <= n <= 35 for n in front_numbers) or
-                            not all(1 <= n <= 12 for n in back_numbers) or
-                            len(set(front_numbers)) != 5 or len(set(back_numbers)) != 2):
-                            self.logger.warning(f"DLT 期号 {draw_num} 号码验证失败，已跳过: front={front_numbers}, back={back_numbers}")
-                            continue
-
-                        # 获取奖级信息 (参考旧代码)
-                        prize_levels = item.get('prizeLevelList', [])
-                        first_prize_num = prize_levels[0].get('stakeCount', '0') if prize_levels else '0'
-                        first_prize_amount = prize_levels[0].get('stakeAmount', '0') if prize_levels else '0'
-
-                        extracted_data_list.append({
-                            'draw_num': draw_num,
-                            'draw_date': draw_date,
-                            'front_numbers': front_numbers, # 直接存储列表
-                            'back_numbers': back_numbers,   # 直接存储列表
-                            'prize_pool': prize_pool_str,
-                            'sales': sales_str,
-                            'first_prize_num': first_prize_num,
-                            'first_prize_amount': first_prize_amount
-                        })
-                     except (ValueError, TypeError, KeyError, IndexError) as e:
-                         self.logger.error(f"解析 DLT item {item.get('lotteryDrawNum')} 时出错: {e}", exc_info=True)
-                         continue
-                # <--- 解析结束 ---
+            # 更新数量参数
+            if 'limit' in params:
+                params['limit'] = str(page_size)
+            elif 'num' in params:
+                params['num'] = str(page_size)
+            elif 'count' in params:
+                params['count'] = str(page_size)
+            
+            # 根据API类型选择请求方式
+            if base_url.endswith('.json'):
+                data = network_client.get_json(base_url, params=params, headers=headers)
             else:
-                 return None # 不支持的彩票类型
+                response = network_client.get(base_url, params=params, headers=headers)
+                data = response.text
+            
+            parsed_items = parser.parse(data, lottery_type)
+            return parsed_items if parsed_items else None
+            
+        except Exception as e:
+            self.logger.error(f"获取简单API数据失败: {str(e)}")
+            return None
+    
+    def _fetch_cwl_data(self, network_client, parser, base_url: str, params: Dict, headers: Dict,
+                       lottery_type: str, page_size: int) -> Optional[List[Dict]]:
+        """获取福彩网数据（支持分页）"""
+        max_pages = self.config_manager.get('api.max_pages', 100)
+        all_items = []
+        page_no = 1
+        fetch_delay = 1
+        
+        # 更新页面大小参数
+        params['pageSize'] = str(page_size)
+        
+        while page_no <= max_pages:
+            params['pageNo'] = str(page_no)
+            
+            try:
+                data = network_client.get_json(base_url, params=params, headers=headers)
+                parsed_items = parser.parse(data, lottery_type)
+                
+                if not parsed_items:
+                    if page_no == 1:
+                        self.logger.warning("福彩网API第一页返回空数据")
+                        return None
+                    else:
+                        break
+                
+                all_items.extend(parsed_items)
+                
+                # 检查日期限制
+                if parsed_items:
+                    last_item_date_str = parsed_items[-1].get('draw_date', '')
+                    try:
+                        last_item_dt = pd.to_datetime(last_item_date_str)
+                        if last_item_dt < self.date_limit:
+                            break
+                    except ValueError:
+                        pass
+                
+                # 检查是否还有更多页面
+                if isinstance(data, dict) and data.get('state') == 0:
+                    # 福彩网的分页逻辑可能需要根据实际API调整
+                    if len(parsed_items) < int(params.get('pageSize', 30)):
+                        break  # 返回数据少于请求数量，说明没有更多数据
+                
+                page_no += 1
+                if page_no <= max_pages:
+                    time.sleep(fetch_delay)
+                    
+            except Exception as e:
+                self.logger.error(f"获取福彩网第 {page_no} 页数据失败: {str(e)}")
+                if page_no == 1:
+                    return None
+                else:
+                    break
+        
+        return all_items if all_items else None
+    
 
-            if not extracted_data_list:
-                 self.logger.info(f"从在线 API 获取到 {lottery_type} 的 0 条有效新数据。")
-                 # return [] # 返回空列表表示无新数据，而非获取失败 (让调用者判断)
-                 # 改为返回None，因为 update_data 会处理 None 和 [] 的情况
-                 # 如果返回[]，update_data 可能会错误地认为更新成功但无新数据
-                 # 还是返回 [] 比较好，表示请求成功但内容为空或无法解析
-                 return []
-
-            return extracted_data_list
-
-        except (NetworkError, TimeoutError, ConnectionError, HTTPError) as e:
-            self.logger.error(f"获取 {lottery_type} 在线数据网络请求失败: {str(e)}")
-            return None # 网络错误，获取失败
-        except (ValueError, KeyError, Exception) as e:
-            self.logger.error(f"解析 {lottery_type} 在线数据或发生其他错误: {str(e)}", exc_info=True)
-            return None # 解析错误，获取失败
 
     def get_issue_data(self, lottery_type: str, issue: str) -> Optional[Dict]:
         """从本地历史数据中获取指定期号的数据 (从 JSON 读取)

@@ -72,11 +72,104 @@
     "ssq_url": "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice",
     "dlt_url": "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry",
     "page_size": 30,
-    "max_pages": 100
+    "max_pages": 100,
+    "backup_apis": {
+      "dlt": [
+        {
+          "name": "官方体彩网",
+          "url": "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry",
+          "type": "sporttery",
+          "params": {
+            "gameNo": "85",
+            "provinceId": "0",
+            "pageSize": "30",
+            "isVerify": "1",
+            "pageNo": "1"
+          },
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://www.sporttery.cn/",
+            "Origin": "https://www.sporttery.cn",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache"
+          }
+        },
+        {
+          "name": "浙江体彩网",
+          "url": "https://www.zjlottery.com/win/sresult.asp",
+          "type": "simple",
+          "params": {
+            "flag": "L",
+            "expect": "30"
+          },
+          "headers": {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer": "https://www.zjlottery.com/",
+            "Accept-Language": "zh-CN,zh;q=0.9"
+          }
+        },
+        {
+          "name": "彩票API接口",
+          "url": "https://api.apiopen.top/api/lottery",
+          "type": "simple",
+          "params": {
+            "code": "dlt",
+            "date": ""
+          },
+          "headers": {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          }
+        },
+        {
+          "name": "500彩票网",
+          "url": "https://datachart.500.com/dlt/history/newinc/history.php",
+          "type": "simple",
+          "params": {
+            "limit": "30",
+            "sort": "0"
+          },
+          "headers": {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer": "https://datachart.500.com/dlt/",
+            "Accept-Language": "zh-CN,zh;q=0.9"
+          }
+        },
+        {
+          "name": "彩票开奖查询",
+          "url": "https://cp.360.cn/kaijiang/dlt",
+          "type": "simple",
+          "params": {},
+          "headers": {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer": "https://cp.360.cn/",
+            "Accept-Language": "zh-CN,zh;q=0.9"
+          }
+        }
+      ],
+      "ssq": [
+        {
+          "name": "官方福彩网",
+          "url": "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice",
+          "type": "cwl",
+          "params": {
+            "name": "ssq",
+            "pageNo": "1",
+            "pageSize": "30",
+            "systemType": "PC"
+          },
+          "headers": {
+            "Referer": "https://www.cwl.gov.cn/",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Origin": "https://www.cwl.gov.cn"
+          }
+        }
+      ]
+    }
   },
   "_metadata": {
-    "last_updated": "2025-06-10T10:13:06.715155",
-    "version": "1.0"
+    "last_updated": "2025-06-11T18:20:00.000000",
+    "version": "1.1"
   },
   "test": {
     "value": "test_data"

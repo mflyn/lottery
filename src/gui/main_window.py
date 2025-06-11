@@ -937,14 +937,31 @@ class DataAnalysisFrame(ttk.Frame):
         }
         # <-----------------------
 
-        columns_to_display = list(df.columns)
+        # --- 定义要显示的核心列 --- >
         lottery_type = self.lottery_type_var.get()
-
-        # --- 大乐透条件列显示逻辑 --- >
+        
+        if lottery_type == 'ssq':
+            # 双色球：显示核心列，隐藏展开的号码列
+            core_columns = ['draw_num', 'draw_date', 'red_numbers', 'blue_number', 'prize_pool', 'sales', 'first_prize_num', 'first_prize_amount']
+            # 过滤掉展开的号码列 (red_1, red_2, ..., red_6, blue_1)
+            expanded_columns = [f'red_{i}' for i in range(1, 7)] + ['blue_1']
+        elif lottery_type == 'dlt':
+            # 大乐透：显示核心列，隐藏展开的号码列
+            core_columns = ['draw_num', 'draw_date', 'front_numbers', 'back_numbers', 'prize_pool', 'sales', 'first_prize_num', 'first_prize_amount']
+            # 过滤掉展开的号码列 (front_1, front_2, ..., front_5, back_1, back_2)
+            expanded_columns = [f'front_{i}' for i in range(1, 6)] + [f'back_{i}' for i in range(1, 3)]
+        else:
+            core_columns = list(df.columns)
+            expanded_columns = []
+        
+        # 只显示存在的核心列，排除展开列
+        columns_to_display = [col for col in core_columns if col in df.columns and col not in expanded_columns]
+        
+        # --- 大乐透条件列显示逻辑（隐藏全为0的列）--- >
         if lottery_type == 'dlt':
             columns_to_hide = []
             for col in ['prize_pool', 'sales']:
-                if col in df.columns:
+                if col in columns_to_display:
                     try:
                         # 尝试将列转为数字，无法转换的视为NaN，然后检查是否全为0或NaN
                         numeric_col = pd.to_numeric(df[col], errors='coerce')
