@@ -1,4 +1,4 @@
-# 测试文档
+# 测试文档与用例指南
 
 ## 1. 测试环境配置
 
@@ -50,32 +50,48 @@ pytest tests/boundary_tests.py::TestBoundaries::test_empty_dataset
 - `test_number_properties`: 测试数字特性计算
 - `test_historical_combinations`: 测试历史组合特征
 
+#### DLT特征处理器测试 (tests/unit/test_dlt_feature_processor.py)
+- `test_extract_basic_features`: 测试基础特征提取
+- `test_extract_advanced_features`: 测试高级特征提取
+- `test_invalid_input`: 测试无效输入处理
+
+#### 缓存管理测试 (tests/unit/test_cache.py, tests/unit/test_feature_engineering.py)
+- `test_cache_mechanism`/`test_cache_management`: 测试缓存存储和读取
+- `test_cache_expiration`: 测试缓存过期机制
+- `test_cache_invalidation`/`test_cache_refresh`: 测试缓存失效/刷新处理
+
+#### 进度跟踪测试 (tests/unit/test_progress_tracking.py)
+- `test_progress_callback`: 测试进度回调功能
+- `test_error_handling`: 测试错误处理机制
+
+#### 特征验证测试 (tests/unit/test_feature_validator.py)
+- `test_feature_completeness`: 测试特征完整性验证
+- `test_value_validation`: 测试数值有效性验证
+- `test_range_validation`: 测试数值范围验证
+
+#### 特征选择测试 (tests/unit/test_feature_selector.py)
+- `test_mutual_info_selection`: 测试互信息特征选择
+- `test_correlation_selection`: 测试相关性特征选择
+- `test_combined_selection`: 测试组合特征选择
+
 使用示例:
 ```bash
 pytest tests/unit/test_feature_processor.py
-```
-
-#### 缓存管理测试 (tests/unit/test_cache.py)
-- `test_cache_mechanism`: 测试缓存存储和读取
-- `test_cache_expiration`: 测试缓存过期机制
-- `test_cache_invalidation`: 测试缓存失效处理
-
-使用示例:
-```bash
+pytest tests/unit/test_dlt_feature_processor.py
 pytest tests/unit/test_cache.py
+pytest tests/unit/test_feature_engineering.py
+pytest tests/unit/test_progress_tracking.py
+pytest tests/unit/test_feature_validator.py
+pytest tests/unit/test_feature_selector.py
 ```
 
 ### 2.3 集成测试 (tests/integration/)
 
 #### 特征工程流水线测试 (test_feature_pipeline.py)
-- `test_complete_pipeline`: 测试完整特征处理流程
+- `test_complete_pipeline`/`test_end_to_end_pipeline`: 测试完整特征处理流程
 - `test_feature_storage`: 测试特征存储和加载
 - `test_feature_validation`: 测试特征验证流程
-
-使用示例:
-```bash
-pytest tests/integration/test_feature_pipeline.py
-```
+- 进度跟踪、特征选择等
 
 #### 可视化测试 (test_visualization.py)
 - `test_correlation_heatmap`: 测试相关性热力图
@@ -84,6 +100,7 @@ pytest tests/integration/test_feature_pipeline.py
 
 使用示例:
 ```bash
+pytest tests/integration/test_feature_pipeline.py
 pytest tests/integration/test_visualization.py
 ```
 
@@ -134,7 +151,14 @@ pytest -k "feature"
 pytest -m "not performance"
 ```
 
-### 3.3 测试覆盖率
+### 3.3 运行特定测试
+```bash
+pytest tests/unit/test_dlt_feature_processor.py
+pytest tests/unit/test_feature_validator.py::TestFeatureValidator
+pytest tests/unit/test_feature_selector.py::TestFeatureSelector::test_mutual_info_selection
+```
+
+### 3.4 测试覆盖率
 ```bash
 # 生成覆盖率报告
 pytest --cov=src tests/
@@ -146,9 +170,21 @@ pytest --cov=src --cov-report=html tests/
 pytest --cov=src --cov-report=xml tests/
 ```
 
-## 4. 编写测试用例
+## 4. 测试报告说明
 
-### 4.1 测试用例结构
+### 4.1 HTML覆盖率报告
+运行覆盖率测试后，将在项目根目录下生成 `htmlcov` 文件夹，包含 `index.html` 总体覆盖率报告及各源代码文件详情。
+
+### 4.2 控制台输出说明
+- `.`: 测试通过
+- `F`: 测试失败
+- `E`: 测试错误
+- `s`: 测试跳过
+- `x`: 预期失败
+
+## 5. 编写测试用例
+
+### 5.1 测试用例结构
 ```python
 import pytest
 from src.core.features import FeatureEngineering
@@ -173,7 +209,7 @@ class TestFeatureEngineering:
         assert result.stats.mean < 1.0  # 平均执行时间应小于1秒
 ```
 
-### 4.2 使用 Fixtures
+### 5.2 使用 Fixtures
 ```python
 @pytest.fixture(scope="module")
 def test_data():
@@ -191,7 +227,7 @@ def test_feature_generation(test_data):
     assert result.shape[1] == 10
 ```
 
-### 4.3 参数化测试
+### 5.3 参数化测试
 ```python
 @pytest.mark.parametrize("input_data,expected", [
     ([1, 2, 3], 6),
@@ -203,45 +239,53 @@ def test_calculations(input_data, expected):
     assert sum(input_data) == expected
 ```
 
-## 5. 最佳实践
+## 6. 最佳实践
 
-### 5.1 测试设计原则
+### 6.1 测试设计原则
 - 每个测试只测试一个功能点
 - 使用有意义的测试名称
 - 添加清晰的测试文档字符串
 - 合理使用 fixtures 和 setup/teardown
 
-### 5.2 测试执行建议
+### 6.2 测试执行建议
 - 定期运行完整测试套件
 - 配置持续集成自动运行测试
 - 保持测试代码的整洁和可维护性
 - 及时更新测试用例
+- 代码变更后运行完整测试套件
+- 定期检查测试覆盖率
+- 及时修复失败的测试
 
-### 5.3 测试数据管理
+### 6.3 测试数据管理
+- 使用 fixtures 管理测试数据
+- 避免测试间的数据依赖
+- 及时清理测试数据
+- 使用合适的测试数据集
 - 使用小型数据集进行单元测试
 - 使用真实数据样本进行集成测试
 - 使用大型数据集进行性能测试
 - 妥善管理测试数据文件
 
-## 6. 故障排除
+## 7. 故障排除
 
-### 6.1 常见问题
-1. 测试发现问题
-   - 检查测试文件命名（test_*.py）
-   - 检查测试类命名（Test*）
-   - 检查测试方法命名（test_*）
-
+### 7.1 常见问题
+1. 测试无法找到/发现问题
+   - 检查测试文件名是否以 `test_` 开头
+   - 检查测试类名是否以 `Test` 开头
+   - 检查测试方法名是否以 `test_` 开头
 2. 导入错误
    - 检查 PYTHONPATH 设置
-   - 验证依赖包安装
-   - 检查导入路径
-
-3. 性能问题
+   - 检查依赖包是否正确安装
+   - 检查导入路径是否正确
+3. 性能/超时问题
    - 检查测试数据大小
    - 优化测试执行顺序
    - 使用并行测试运行
+   - 检查测试配置中的超时设置
+   - 优化测试执行效率
+   - 考虑使用异步测试
 
-### 6.2 调试技巧
+### 7.2 调试技巧
 - 使用 pytest -v 查看详细输出
 - 使用 pytest --pdb 在失败处进入调试器
 - 使用 pytest.set_trace() 设置断点

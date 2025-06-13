@@ -9,6 +9,9 @@
 ## 2. 安装步骤
 
 ### 2.1 环境准备
+
+> **详细的 Python 依赖和环境配置说明请参考 [environment_setup.md](environment_setup.md)。**
+
 ```bash
 # 创建虚拟环境
 python -m venv venv
