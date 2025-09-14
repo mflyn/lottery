@@ -226,13 +226,13 @@ class FeatureEngineering:
             
             # 调用处理器的高级特征方法 (如果存在)
             if hasattr(self.processor, 'extract_advanced_features'):
-                advanced_features = self.processor.extract_advanced_features(basic_features)
-                # 合并特征... (根据需要实现)
+                advanced_features = self.processor.extract_advanced_features(data) # Pass original data
+                basic_features = pd.concat([basic_features, advanced_features], axis=1)
             
             if progress_callback:
                 progress_callback(100, "特征生成完成")
-                
-            return basic_features # 暂时只返回基础特征，待合并逻辑实现
+            print(basic_features.dtypes)
+            return basic_features
             
         except Exception as e:
             if progress_callback:
@@ -256,37 +256,37 @@ class FeatureEngineering:
             if 'number' not in df.columns:
                 # 如果是双色球或大乐透数据，尝试从红球列创建number列
                 if self.lottery_type in ['ssq', 'dlt'] and 'red_1' in df.columns:
-                    # 使用第一个红球作为number列
                     df['number'] = df['red_1']
+                elif self.lottery_type == 'dlt' and 'front_1' in df.columns:
+                    df['number'] = df['front_1']
                 else:
                     # 如果没有可用的列，使用索引作为number列
                     df['number'] = df.index
             
             # 计算红球相关特征
-            red_columns = [col for col in df.columns if col.startswith('red_') and col != 'red_sum']
-            if red_columns and self.lottery_type in ['ssq', 'dlt']:
-                # 计算红球和值
+            red_columns = [col for col in df.columns if col.startswith('red_') and col not in ['red_sum', 'red_numbers']]
+            if red_columns and self.lottery_type == 'ssq':
                 df['red_sum'] = df[red_columns].sum(axis=1)
-                # 计算红球平均值
                 df['red_mean'] = df[red_columns].mean(axis=1)
-                # 计算红球标准差
                 df['red_std'] = df[red_columns].std(axis=1)
-                # 计算奇数个数
                 df['red_odd_count'] = df[red_columns].apply(lambda x: sum(v % 2 == 1 for v in x), axis=1)
-                # 计算偶数个数
                 df['red_even_count'] = df[red_columns].apply(lambda x: sum(v % 2 == 0 for v in x), axis=1)
-                # 计算质数个数（简化版，只考虑常见质数）
                 primes = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31}
                 df['red_prime_count'] = df[red_columns].apply(lambda x: sum(v in primes for v in x), axis=1)
-                # 计算连号个数
-                df['red_consecutive_count'] = 0  # 默认值
+                df['red_consecutive_count'] = 0
+
+            front_columns = [col for col in df.columns if col.startswith('front_') and col not in ['front_sum', 'front_numbers']]
+            if front_columns and self.lottery_type == 'dlt':
+                df['front_sum'] = df[front_columns].sum(axis=1)
+                df['front_mean'] = df[front_columns].mean(axis=1)
+                df['front_std'] = df[front_columns].std(axis=1)
+                df['front_odd_count'] = df[front_columns].apply(lambda x: sum(v % 2 == 1 for v in x), axis=1)
+                df['front_even_count'] = df[front_columns].apply(lambda x: sum(v % 2 == 0 for v in x), axis=1)
             
-            # 计算蓝球特征
-            if 'blue' in df.columns:
-                df['blue_is_prime'] = df['blue'].apply(lambda x: x in {2, 3, 5, 7, 11, 13})
-                df['blue_is_odd'] = df['blue'].apply(lambda x: x % 2 == 1)
+            if 'blue_1' in df.columns:
+                df['blue_is_prime'] = df['blue_1'].apply(lambda x: x in {2, 3, 5, 7, 11, 13})
+                df['blue_is_odd'] = df['blue_1'].apply(lambda x: x % 2 == 1)
             
-            # 基础统计特征
             features = pd.DataFrame({
                 'number_frequency_ma7': df['number'].rolling(window=periods).mean(),
                 'number_frequency_mean': df['number'].mean(),
@@ -295,21 +295,15 @@ class FeatureEngineering:
                 'sum_value_ma7': df['number'].rolling(window=periods).sum()
             })
             
-            # 添加测试中期望的特征
-            for col in ['red_sum', 'red_mean', 'red_std', 'red_odd_count', 'red_even_count', 
-                       'red_prime_count', 'red_consecutive_count', 'blue_is_prime', 'blue_is_odd']:
+            feature_cols = ['red_sum', 'red_mean', 'red_std', 'red_odd_count', 'red_even_count', 
+                       'red_prime_count', 'red_consecutive_count', 'blue_is_prime', 'blue_is_odd',
+                       'front_sum', 'front_mean', 'front_std', 'front_odd_count', 'front_even_count']
+            for col in feature_cols:
                 if col in df.columns:
                     features[col] = df[col]
-                else:
-                    # 如果原始数据中没有这些列，创建默认值
-                    if col in ['blue_is_prime', 'blue_is_odd']:
-                        features[col] = False
-                    elif col in ['red_odd_count', 'red_even_count', 'red_prime_count', 'red_consecutive_count']:
-                        features[col] = 0
-                    else:
-                        features[col] = 0.0
             
             features = features.bfill().ffill()
+            print(features.dtypes)
             return features
             
         except Exception as e:

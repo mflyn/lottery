@@ -40,17 +40,18 @@ class DLTFeatureProcessor(BaseFeatureProcessor):
         features = pd.DataFrame()
         
         # 计算前区号码间隔
-        features['front_gaps'] = self.calculate_gaps(data['front_numbers'])
-        
+        front_gaps = self.calculate_gaps(data['front_numbers'])
+        features['front_gaps_mean'] = [np.mean(g) if g else 0 for g in front_gaps]
+        features['front_gaps_std'] = [np.std(g) if g else 0 for g in front_gaps]
+
         # 计算后区号码间隔
-        features['back_gaps'] = self.calculate_gaps(data['back_numbers'])
-        
+        back_gaps = self.calculate_gaps(data['back_numbers'])
+        features['back_gaps_mean'] = [np.mean(g) if g else 0 for g in back_gaps]
+
         # 分析前区号码模式
-        features['front_patterns'] = self.analyze_patterns(data['front_numbers'])
-        
-        # 分析后区号码模式
-        features['back_patterns'] = self.analyze_patterns(data['back_numbers'])
-        
+        front_patterns = self.analyze_patterns(data['front_numbers'])
+        features = pd.concat([features, pd.DataFrame(front_patterns)], axis=1)
+
         return features
 
     def calculate_gaps(self, numbers_series: pd.Series) -> List[List[int]]:
