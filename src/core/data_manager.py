@@ -1,15 +1,13 @@
 import pandas as pd
-import numpy as np
-import os
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 import time
 from .config_manager import get_config_manager
-from .network_client import get_network_client, NetworkError, TimeoutError, ConnectionError, HTTPError
-from .validation import DataValidator, DataCleaner, validate_lottery_data, clean_lottery_data
+from .network_client import get_network_client
+from .validation import DataValidator, DataCleaner
 from .api_parsers import get_parser
 
 class LotteryDataManager:
@@ -125,16 +123,20 @@ class LotteryDataManager:
                          if split_nums.shape[1] == 7:
                              df['red_numbers'] = split_nums.iloc[:, :6].apply(lambda row: [int(n) for n in row], axis=1)
                              df['blue_number'] = split_nums.iloc[:, 6].astype(int) # 注意这里是单个数字，非列表
-                         else: self.logger.warning("ssq numbers 列格式不为 7 位")
-                     except Exception as e: self.logger.error(f"从 ssq numbers 列恢复失败: {e}")
+                         else:
+                             self.logger.warning("ssq numbers 列格式不为 7 位")
+                     except Exception as e:
+                         self.logger.error(f"从 ssq numbers 列恢复失败: {e}")
                 elif 'numbers' in df.columns and lottery_type == 'dlt' and 'front_numbers' not in df.columns:
                      try:
                          split_nums = df['numbers'].str.split(',', expand=True)
                          if split_nums.shape[1] == 7:
                              df['front_numbers'] = split_nums.iloc[:, :5].apply(lambda row: [int(n) for n in row], axis=1)
                              df['back_numbers'] = split_nums.iloc[:, 5:].apply(lambda row: [int(n) for n in row], axis=1)
-                         else: self.logger.warning("dlt numbers 列格式不为 7 位")
-                     except Exception as e: self.logger.error(f"从 dlt numbers 列恢复失败: {e}")
+                         else:
+                             self.logger.warning("dlt numbers 列格式不为 7 位")
+                     except Exception as e:
+                         self.logger.error(f"从 dlt numbers 列恢复失败: {e}")
 
                 # 确保数值列是数值类型
                 numeric_cols = ['sales', 'prize_pool']
@@ -659,7 +661,7 @@ class LotteryDataManager:
         # 验证日期格式
         try:
             pd.to_datetime(data['date'])
-        except:
+        except ValueError:
             return False
 
         # 验证期号格式

@@ -1,8 +1,11 @@
 import unittest
+import pandas as pd
+import numpy as np
 from unittest.mock import Mock, patch
 from src.core.number_generator import LotteryNumberGenerator
 from src.core.features.feature_engineering import FeatureEngineering
 from src.data.data_manager import DataManager
+from src.core.model.model_interpreter import ModelInterpreter
 
 class NumberGeneratorTests(unittest.TestCase):
     """号码生成器测试"""
@@ -48,7 +51,7 @@ class FeatureEngineeringTests(unittest.TestCase):
         advanced = self.fe.generate_advanced_features(mock_features)
         self.assertGreater(len(advanced.columns), 1)
 
-class FeatureEngineeringTests(unittest.TestCase):
+class FeatureEngineeringAdvancedTests(unittest.TestCase):
     """特征工程测试补充"""
     
     def setUp(self):
@@ -115,7 +118,6 @@ class DataManagerTests(unittest.TestCase):
     
     def test_load_data(self):
         """测试数据加载"""
-        mock_data = pd.DataFrame({'test': [1, 2, 3]})
         self.mock_sqlite.connect().cursor().fetchall.return_value = [(1,), (2,), (3,)]
         data = self.data_manager.load_lottery_data('dlt')
         self.assertIsNotNone(data)

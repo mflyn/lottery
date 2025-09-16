@@ -1,6 +1,5 @@
 from typing import Optional, List, Dict, Tuple
 import pandas as pd
-from datetime import datetime
 import logging
 
 from .generators import FeatureGenerator

@@ -1,6 +1,6 @@
 import pytest
-import time
 import numpy as np
+import pandas as pd
 from src.core.number_generator import LotteryNumberGenerator
 from src.core.features.feature_engineering import FeatureEngineering
 from src.data.data_manager import DataManager

@@ -1,6 +1,5 @@
-from typing import List, Dict, Optional
-import random
-import numpy as np
+from typing import List
+import pandas as pd
 from src.utils.logger import Logger
 
 class LotteryNumberGenerator:

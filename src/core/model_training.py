@@ -1,3 +1,5 @@
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+
 class ModelTraining:
     def evaluate_model(self, X_test, y_test):
         """评估模型"""

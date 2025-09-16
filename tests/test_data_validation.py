@@ -7,8 +7,6 @@
 
 import unittest
 import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
 import sys
 import os
 
@@ -18,7 +16,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from src.core.validation import (
     DataValidator, 
     DataCleaner, 
-    ValidationLevel,
     validate_lottery_data,
     clean_lottery_data
 )

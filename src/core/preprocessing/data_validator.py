@@ -1,7 +1,5 @@
-from typing import Dict, List, Optional
+from typing import Dict
 import pandas as pd
-import numpy as np
-from datetime import datetime
 import logging
 
 class DataValidator:
@@ -76,7 +74,7 @@ class DataValidator:
         elif rule_type == 'format':
             try:
                 series.apply(params['validator'])
-            except:
+            except ValueError:
                 results['errors'].append(
                     f"列 {series.name} 包含格式错误的值"
                 )

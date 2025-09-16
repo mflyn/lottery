@@ -1,7 +1,6 @@
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional
 import numpy as np
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
-from sklearn.metrics import make_scorer, mean_squared_error, accuracy_score
 import optuna
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA

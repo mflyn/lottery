@@ -1,8 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import pandas as pd
 from src.core.strategy.number_evaluator import NumberEvaluator
-from src.core.models.lottery_types import DLTNumber, SSQNumber
+from src.core.models.lottery_types import SSQNumber
 
 class NumberScoreFrame(ttk.Frame):
     """号码评分界面"""
@@ -88,7 +87,7 @@ class NumberScoreFrame(ttk.Frame):
             self.detail_text.delete('1.0', tk.END)
             self.detail_text.insert('1.0', self._format_details(result['details']))
             
-        except ValueError as e:
+        except ValueError:
             messagebox.showerror('输入错误', '请输入有效的号码格式')
         except Exception as e:
             messagebox.showerror('错误', f'评分失败: {str(e)}')

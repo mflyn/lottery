@@ -1,7 +1,5 @@
 import pandas as pd
-import numpy as np
-from typing import List, Dict, Optional
-from datetime import datetime
+from typing import Dict
 from src.utils.logger import Logger
 
 class LotteryAnalyzer:

@@ -1,8 +1,10 @@
 import tkinter as tk
-from tkinter import ttk
-from matplotlib.figure import Figure
+from tkinter import ttk, messagebox
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from typing import Dict
+from src.core.ssq_analyzer import SSQAnalyzer
 
 class AnalysisTab(ttk.Frame):
     def __init__(self, master):

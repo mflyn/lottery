@@ -1,5 +1,4 @@
 from typing import List, Dict
-import numpy as np
 from src.core.generators.base_generator import LotteryNumber
 from src.core.analyzers import SSQAnalyzer, DLTAnalyzer
 

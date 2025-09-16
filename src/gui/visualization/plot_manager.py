@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import List, Dict, Any
+from typing import Dict
 import pandas as pd
+import numpy as np
 
 class PlotManager:
     """绘图管理器"""

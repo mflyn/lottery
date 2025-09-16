@@ -8,12 +8,11 @@
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Any, Union, Tuple
+from typing import Dict, List, Optional, Any, Tuple
 import json
 import re
-from datetime import datetime, timedelta
 
-from .data_validator import DataValidator, ValidationLevel
+from .data_validator import DataValidator
 from ..config_manager import get_config_manager
 from ..exceptions import DataCleaningError
 from ..logging_config import get_logger
@@ -160,13 +159,13 @@ class DataCleaner:
             for fmt in date_formats:
                 try:
                     return pd.to_datetime(date_str, format=fmt)
-                except:
+                except ValueError:
                     continue
             
             # 如果都失败，尝试自动解析
             try:
                 return pd.to_datetime(date_str)
-            except:
+            except ValueError:
                 return None
         
         original_count = data['draw_date'].notna().sum()
@@ -244,7 +243,7 @@ class DataCleaner:
                     
                     if len(fixed_numbers) == 6 and len(set(fixed_numbers)) == 6:
                         return sorted(fixed_numbers)
-                except:
+                except Exception:
                     pass
                 
                 return None
@@ -264,7 +263,7 @@ class DataCleaner:
                     n = int(number)
                     if 1 <= n <= 16:
                         return n
-                except:
+                except ValueError:
                     pass
                 return None
             
@@ -297,7 +296,7 @@ class DataCleaner:
                     
                     if len(fixed_numbers) == 5 and len(set(fixed_numbers)) == 5:
                         return sorted(fixed_numbers)
-                except:
+                except Exception:
                     pass
                 
                 return None
@@ -327,7 +326,7 @@ class DataCleaner:
                     
                     if len(fixed_numbers) == 2 and len(set(fixed_numbers)) == 2:
                         return sorted(fixed_numbers)
-                except:
+                except Exception:
                     pass
                 
                 return None
@@ -356,14 +355,14 @@ class DataCleaner:
             try:
                 if all(pd.isna(x) for x in numbers):
                     return None
-            except:
+            except Exception:
                 pass
         else:
             # 对于标量值，使用pd.isna检查
             try:
                 if pd.isna(numbers):
                     return None
-            except:
+            except Exception:
                 pass
         
         # 如果已经是列表
@@ -371,7 +370,7 @@ class DataCleaner:
             try:
                 # 确保列表中的元素都是整数
                 return [int(x) for x in numbers if str(x).strip().isdigit()]
-            except:
+            except Exception:
                 return list(numbers)
         
         # 如果是字符串
@@ -383,7 +382,7 @@ class DataCleaner:
                 parsed = json.loads(numbers)
                 if isinstance(parsed, (list, tuple)):
                     return list(parsed)
-            except:
+            except json.JSONDecodeError:
                 pass
             
             # 尝试其他分隔符
@@ -392,7 +391,7 @@ class DataCleaner:
                     parts = numbers.split(sep)
                     if len(parts) > 1:
                         return [int(p.strip()) for p in parts if p.strip().isdigit()]
-                except:
+                except ValueError:
                     continue
         
         return None
@@ -445,7 +444,7 @@ class DataCleaner:
             
             try:
                 return float(cleaned) if '.' in cleaned else int(cleaned)
-            except:
+            except ValueError:
                 return None
         
         original_values = data[field].copy()

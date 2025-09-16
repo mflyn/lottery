@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import seaborn as sns
 import pandas as pd
-from typing import Dict, Any
 
 class DataExplorer(ttk.Frame):
     def __init__(self, master, data: pd.DataFrame):

@@ -11,7 +11,6 @@ import logging.handlers
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 from datetime import datetime
 from .config_manager import get_config_manager
 

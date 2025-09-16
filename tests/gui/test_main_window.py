@@ -1,11 +1,10 @@
 import unittest
 import tkinter as tk
-from tkinter import ttk
 import tempfile
 import pandas as pd
 import os
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 class TestLotteryToolsGUI(unittest.TestCase):
     @classmethod
@@ -133,9 +132,7 @@ class TestLotteryToolsGUI(unittest.TestCase):
     @patch('tkinter.messagebox.showinfo')
     def test_menu_import_export(self, mock_info, mock_open):
         """模拟用户点击菜单导入导出"""
-        menubar = self.app.menubar
         # 文件菜单通常在第0个
-        file_menu = menubar.winfo_children()[0]
         # 直接调用菜单命令（如有）
         # 这里只做示例，实际应根据实现调用对应命令
         # self.app._on_import_data()  # 如果有对应方法

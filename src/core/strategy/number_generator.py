@@ -1,6 +1,5 @@
 from typing import List, Dict, Union
 import random
-import numpy as np
 from .number_evaluator import NumberEvaluator
 from ..models.lottery_types import DLTNumber, SSQNumber
 

@@ -1,7 +1,7 @@
 import time
 import psutil
 import functools
-from typing import Callable, Any, Optional
+from typing import Callable, Any
 from dataclasses import dataclass
 from datetime import datetime
 import tracemalloc

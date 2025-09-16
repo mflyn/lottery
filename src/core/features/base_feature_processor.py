@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 import pandas as pd
-from typing import Dict, List, Union
-import numpy as np
+from typing import Dict, List
 from sklearn.feature_selection import mutual_info_regression
 from sklearn.preprocessing import StandardScaler
 

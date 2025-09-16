@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from typing import Dict, Optional
 
 class I18nManager:
     """国际化管理器"""

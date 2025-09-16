@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import pandas as pd
 from ..controllers.feature_engineering_controller import FeatureEngineeringController
 
 class FeatureEngineeringFrame(ttk.Frame):
@@ -78,7 +77,7 @@ class FeatureEngineeringFrame(ttk.Frame):
         # 获取期数
         try:
             periods = self.periods_var.get()
-        except:
+        except ValueError:
             messagebox.showerror("错误", "请输入有效的期数")
             return
             
@@ -97,7 +96,7 @@ class FeatureEngineeringFrame(ttk.Frame):
         
         try:
             k = self.k_var.get()
-        except:
+        except ValueError:
             messagebox.showerror("错误", "请输入有效的特征数量")
             return
             

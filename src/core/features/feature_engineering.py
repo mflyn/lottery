@@ -10,14 +10,10 @@
     - DataExplorationAnalyzer: 数据探索分析器
 """
 
-from typing import Dict, List, Union, Optional, Callable, Tuple
+from typing import Dict, List, Optional
 import pandas as pd
 import numpy as np
-from scipy import stats
-import functools
 import os
-import warnings
-from datetime import datetime
 from sklearn.feature_selection import SelectKBest, mutual_info_regression, f_regression
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
@@ -515,11 +511,10 @@ class FeatureEngineering:
             current: 当前进度
             total: 总数
             description: 进度描述
-        """
+        """ 
         if hasattr(self, 'progress_callback') and self.progress_callback:
             progress = (current / total) * 100
             self.progress_callback(progress, description)
-            raise RuntimeError(f"提取统计特征时发生错误: {str(e)}")
 
 
     def visualize_feature_importance(self, 

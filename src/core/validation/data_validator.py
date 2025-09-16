@@ -8,15 +8,13 @@
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Any, Callable, Union
-from datetime import datetime, timedelta
-import re
+from typing import Dict, List, Any, Callable, Union
 import json
 from dataclasses import dataclass
 from enum import Enum
 
 from ..config_manager import get_config_manager
-from ..exceptions import DataValidationError, DataFormatError
+from ..exceptions import DataValidationError
 from ..logging_config import get_logger
 
 class ValidationLevel(Enum):
@@ -391,7 +389,7 @@ class DataValidator:
             if isinstance(numbers, str):
                 try:
                     numbers = json.loads(numbers)
-                except:
+                except json.JSONDecodeError:
                     return False
             return isinstance(numbers, (list, tuple)) and len(numbers) == 6
         
@@ -409,7 +407,7 @@ class DataValidator:
             if isinstance(numbers, str):
                 try:
                     numbers = json.loads(numbers)
-                except:
+                except json.JSONDecodeError:
                     return False
             if not isinstance(numbers, (list, tuple)):
                 return False
@@ -429,7 +427,7 @@ class DataValidator:
             if isinstance(numbers, str):
                 try:
                     numbers = json.loads(numbers)
-                except:
+                except json.JSONDecodeError:
                     return False
             if not isinstance(numbers, (list, tuple)):
                 return False
@@ -450,7 +448,7 @@ class DataValidator:
                 if isinstance(number, str):
                     number = int(number)
                 return isinstance(number, (int, float)) and 1 <= number <= 16
-            except:
+            except ValueError:
                 return False
         
         invalid_blue = data[~data['blue_number'].apply(check_blue_range)]
@@ -469,7 +467,7 @@ class DataValidator:
             if isinstance(numbers, str):
                 try:
                     numbers = json.loads(numbers)
-                except:
+                except json.JSONDecodeError:
                     return False
             return isinstance(numbers, (list, tuple)) and len(numbers) == 5
         
@@ -487,7 +485,7 @@ class DataValidator:
             if isinstance(numbers, str):
                 try:
                     numbers = json.loads(numbers)
-                except:
+                except json.JSONDecodeError:
                     return False
             if not isinstance(numbers, (list, tuple)):
                 return False
@@ -507,7 +505,7 @@ class DataValidator:
             if isinstance(numbers, str):
                 try:
                     numbers = json.loads(numbers)
-                except:
+                except json.JSONDecodeError:
                     return False
             return isinstance(numbers, (list, tuple)) and len(numbers) == 2
         
@@ -525,7 +523,7 @@ class DataValidator:
             if isinstance(numbers, str):
                 try:
                     numbers = json.loads(numbers)
-                except:
+                except json.JSONDecodeError:
                     return False
             if not isinstance(numbers, (list, tuple)):
                 return False
@@ -544,14 +542,14 @@ class DataValidator:
         
         # 检查期号列
         if 'draw_num' in data.columns:
-            if not data['draw_num'].dtype in ['object', 'string', 'int64']:
+            if data['draw_num'].dtype not in ['object', 'string', 'int64']:
                 type_errors.append(f"期号列类型异常: {data['draw_num'].dtype}")
         
         # 检查日期列
         if 'draw_date' in data.columns:
             try:
                 pd.to_datetime(data['draw_date'])
-            except:
+            except ValueError:
                 type_errors.append("日期列格式不正确")
         
         if type_errors:

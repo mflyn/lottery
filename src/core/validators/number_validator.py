@@ -1,4 +1,4 @@
-from typing import Dict, List, Set
+from typing import Dict, List
 from .base_validator import BaseValidator, ValidationRule
 from ..models import LotteryNumber
 

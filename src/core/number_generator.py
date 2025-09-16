@@ -1,9 +1,7 @@
 from typing import List, Dict, Union
 import random
 import numpy as np
-import pandas as pd
-from .models import DLTNumber, SSQNumber, LotteryNumber
-from .analyzers import PatternAnalyzer, FrequencyAnalyzer
+from .models import DLTNumber, SSQNumber
 
 class LotteryNumberGenerator:
     def __init__(self, lottery_type='dlt'):

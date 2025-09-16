@@ -1,6 +1,6 @@
 import unittest
 import pandas as pd
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 from src.core.data_manager import LotteryDataManager
 from src.core.features.feature_engineering import FeatureEngineering
 from src.core.smart_recommender import SmartRecommender

@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import seaborn as sns
 import pandas as pd
-from typing import Dict, Any, Optional
 
 class InteractiveDataExplorer(ttk.Frame):
     """交互式数据探索界面"""

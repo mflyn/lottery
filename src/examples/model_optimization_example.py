@@ -1,29 +1,33 @@
+import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from src.core.model_optimization import ModelOptimizer
+
+# 创建虚拟数据 (在实际使用中，您需要加载真实数据)
+X_train = pd.DataFrame(np.random.rand(100, 10), columns=[f'feature_{i}' for i in range(10)])
+y_train = pd.Series(np.random.rand(100))
 
 # 创建模型和参数网格
 model = RandomForestRegressor()
 param_grid = {
-    'n_estimators': [100, 200, 300],
-    'max_depth': [3, 5, 7],
-    'min_samples_split': [2, 5, 10]
+    'n_estimators': [50, 100],
+    'max_depth': [3, 5],
+    'min_samples_split': [2, 5]
 }
 
 # 初始化优化器
-optimizer = ModelOptimizer(model, param_grid)
+optimizer = ModelOptimizer(model)
 
-# 网格搜索优化
-best_model = optimizer.grid_search(X_train, y_train)
+# 执行优化
+best_model, best_params = optimizer.optimize(X_train, y_train, param_grid, scoring='neg_mean_squared_error')
 
-# 特征选择
-selected_features = optimizer.feature_selection(X_train, y_train)
+print("优化完成！")
+print(f"最佳参数: {best_params}")
 
-# 降维
-X_reduced, pca = optimizer.dimensionality_reduction(X_train)
-
-# 保存模型
-optimizer.save_model('best_model.joblib')
-
-# 获取优化报告
-report = optimizer.get_optimization_report()
+# 获取优化摘要
+report = optimizer.get_optimization_summary()
+print("\n优化报告:")
 print(report)
+
+# 绘制优化历史
+optimizer.plot_optimization_history()

@@ -227,8 +227,10 @@ class GenerationFrame(ttk.Frame):
                     df = df.rename(columns={'blue_number': 'blue_numbers'})
 
             final_cols = []
-            if lottery_type == 'ssq': final_cols = ['red_numbers', 'blue_numbers']
-            elif lottery_type == 'dlt': final_cols = ['front_numbers', 'back_numbers']
+            if lottery_type == 'ssq':
+                final_cols = ['red_numbers', 'blue_numbers']
+            elif lottery_type == 'dlt':
+                final_cols = ['front_numbers', 'back_numbers']
             
             if not all(col in df.columns for col in final_cols):
                 return None

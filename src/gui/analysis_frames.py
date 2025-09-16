@@ -2,8 +2,6 @@ import tkinter as tk
 from tkinter import ttk
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import seaborn as sns
-from typing import Dict, List
 import pandas as pd
 
 class AnalysisFrame(ttk.Frame):

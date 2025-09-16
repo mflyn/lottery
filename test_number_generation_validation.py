@@ -7,14 +7,13 @@
 
 import sys
 from pathlib import Path
+from core.generators.factory import create_generator
+from core.validators.number_validator import NumberValidator
+from core.models import DLTNumber, SSQNumber
 
 # 添加src目录到Python路径
 src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
-
-from core.generators.factory import create_generator
-from core.validators.number_validator import NumberValidator
-from core.models import DLTNumber, SSQNumber
 
 def test_random_generator():
     """测试随机号码生成器"""

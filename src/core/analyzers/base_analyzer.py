@@ -8,7 +8,7 @@
 import pandas as pd
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 import logging
 
 
@@ -143,7 +143,7 @@ class BaseAnalyzer(ABC):
                 try:
                     if not any(pd.isna(x) for x in value):
                         numbers_list.append(value)
-                except:
+                except Exception:
                     # 如果检查失败，直接添加（可能是整数列表）
                     numbers_list.append(value)
         

@@ -2,16 +2,18 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.svm import SVC
+from typing import Optional
+from .ssq_fetcher import SSQDataFetcher
 
-class SQQAnalyzer:
-    def __init__(self, data_fetcher: Optional[SQQDataFetcher] = None, debug_mode: bool = False):
+class SSQAnalyzer:
+    def __init__(self, data_fetcher: Optional[SSQDataFetcher] = None, debug_mode: bool = False):
         """初始化分析器
 
         Args:
             data_fetcher: 数据获取器实例
             debug_mode: 是否启用调试模式
         """
-        self.data_fetcher = data_fetcher or SQQDataFetcher()
+        self.data_fetcher = data_fetcher or SSQDataFetcher()
         self.debug_mode = debug_mode
         self.plot_style = {
             'figure.figsize': (12, 8),

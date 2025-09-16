@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 from unittest.mock import MagicMock, patch
 from src.core.features.feature_engineering import FeatureEngineering
-from src.core.features.ssq_feature_processor import SSQFeatureProcessor
 
 class TestFeatureEngineering(unittest.TestCase):
     """特征工程模块单元测试"""

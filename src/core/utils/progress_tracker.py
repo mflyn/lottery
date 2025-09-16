@@ -1,6 +1,5 @@
 from typing import Dict, Optional, Callable
 from datetime import datetime
-import time
 import threading
 from queue import Queue
 import logging
@@ -99,7 +98,7 @@ class ProgressTracker:
             try:
                 try:
                     update_type, data = self._update_queue.get(timeout=1)
-                except:
+                except Queue.Empty:
                     continue
                 
                 with self._lock:

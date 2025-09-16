@@ -69,11 +69,9 @@ class RandomGenerator(NumberGenerator):
                 # 简化的热冷号生成（实际应该基于历史数据）
                 hot_numbers = list(range(1, 12))  # 假设1-11为热号
                 cold_numbers = list(range(23, 34))  # 假设23-33为冷号
-                normal_numbers = list(range(12, 23))  # 中间号码
                 
                 hot_count = int(6 * hot_ratio)
                 cold_count = int(6 * cold_ratio)
-                normal_count = 6 - hot_count - cold_count
                 
                 selected_numbers = []
                 selected_numbers.extend(random.sample(hot_numbers, min(hot_count, len(hot_numbers))))
@@ -92,7 +90,6 @@ class RandomGenerator(NumberGenerator):
                 # 大乐透热冷号生成
                 hot_front = list(range(1, 13))
                 cold_front = list(range(24, 36))
-                normal_front = list(range(13, 24))
                 
                 hot_count = int(5 * hot_ratio)
                 cold_count = int(5 * cold_ratio)

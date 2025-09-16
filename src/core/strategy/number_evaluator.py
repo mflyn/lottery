@@ -1,5 +1,4 @@
-from typing import List, Dict, Optional, Union
-import numpy as np
+from typing import Dict, Union
 from dataclasses import dataclass
 from ..models.lottery_types import DLTNumber, SSQNumber
 

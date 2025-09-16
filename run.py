@@ -57,7 +57,7 @@ def main():
         try:
             logger = get_logger(__name__)
             logger.error(f"程序启动失败: {e}", exc_info=True)
-        except:
+        except Exception:
             pass
         sys.exit(1)
 

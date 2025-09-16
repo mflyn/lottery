@@ -1,9 +1,8 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 import networkx as nx
-from typing import List, Dict
+from typing import Dict
 import pandas as pd
-import numpy as np
 
 class DataVisualizer:
     """数据可视化类"""

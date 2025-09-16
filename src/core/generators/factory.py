@@ -56,7 +56,7 @@ class GeneratorFactory:
             generator_class: 生成器类
         """
         if not issubclass(generator_class, NumberGenerator):
-            raise GeneratorError(f"生成器类必须继承自NumberGenerator")
+            raise GeneratorError("生成器类必须继承自NumberGenerator")
         
         self._generators[name] = generator_class
         self.logger.info(f"注册新生成器类型: {name}")

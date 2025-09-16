@@ -1,8 +1,5 @@
-import random
-from typing import List, Dict, Set, Tuple
+from typing import Set
 from dataclasses import dataclass
-import pandas as pd
-import numpy as np
 
 @dataclass
 class LotteryNumber:

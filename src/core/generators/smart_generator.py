@@ -197,17 +197,22 @@ class SmartNumberGenerator:
                 red_numbers.extend(row['red_numbers'])
             red_counter = Counter(red_numbers)
             
+            # --- 新的基于百分位的冷热号定义 (New percentile-based definition) ---
+            # 获取所有33个号码的频次 (包括未出现的)
+            all_counts = {num: red_counter.get(num, 0) for num in range(1, 34)}
+            # 根据频次对号码进行排序
+            sorted_numbers = sorted(all_counts.keys(), key=lambda num: all_counts[num], reverse=True)
+            
+            # 根据排名定义冷热温号
+            red_hot = sorted_numbers[:7]    # 出现最多的前7个为热号
+            red_cold = sorted_numbers[-7:]   # 出现最少的后7个为冷号
+            red_normal = sorted_numbers[7:-7] # 中间的19个为温号
+
+            # 保留频率字典供蓝球分析或其他地方使用
             red_freq = {
                 num: count / self.config[self.lottery_type]['analysis_periods']
                 for num, count in red_counter.items()
             }
-            
-            red_hot = [num for num, freq in red_freq.items()
-                      if freq >= self.config[self.lottery_type]['hot_threshold']]
-            red_cold = [num for num, freq in red_freq.items()
-                       if freq <= self.config[self.lottery_type]['cold_threshold']]
-            red_normal = [num for num in range(1, 34)
-                         if num not in red_hot and num not in red_cold]
             
             # 蓝球分析
             blue_numbers = recent_data['blue_number'].tolist()
@@ -325,7 +330,6 @@ class SmartNumberGenerator:
         # 根据热冷号比例选择
         hot_count = int(count * 0.4)  # 40%热号
         cold_count = int(count * 0.2)  # 20%冷号
-        normal_count = count - hot_count - cold_count  # 剩余正常号
         
         # 选择热号
         if pattern['hot'] and hot_count > 0:

@@ -1,6 +1,5 @@
 from typing import List, Dict
 import requests
-from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from .base_fetcher import BaseLotteryFetcher
 
@@ -79,7 +78,6 @@ class DLTFetcher(BaseLotteryFetcher):
     def _parse_response(self, html: str) -> Dict:
         """解析响应数据"""
         # TODO: 实现具体的解析逻辑
-        soup = BeautifulSoup(html, 'html.parser')
         # 解析页面数据
         pass
     

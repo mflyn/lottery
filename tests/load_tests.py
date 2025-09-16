@@ -1,5 +1,4 @@
 import time
-import threading
 from concurrent.futures import ThreadPoolExecutor
 from src.core.number_generator import LotteryNumberGenerator
 from src.core.features.feature_engineering import FeatureEngineering

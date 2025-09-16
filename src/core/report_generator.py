@@ -1,3 +1,5 @@
+from typing import Dict
+
 class ReportGenerator:
     def __init__(self):
         self.templates = {

@@ -5,23 +5,19 @@
 双色球数据分析模块
 """
 
-from typing import List, Dict, Tuple, Optional, Any
+from typing import List, Dict, Optional, Any
 from collections import Counter
 import requests
-from bs4 import BeautifulSoup
 import pandas as pd
 import json
 import os
 from datetime import datetime, timedelta
-import time
 from enum import Enum
 import logging
-import traceback
 import itertools
 import random
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Optional, Tuple
 import numpy as np
 from pathlib import Path
 from sklearn.ensemble import (
@@ -30,7 +26,7 @@ from sklearn.ensemble import (
     VotingClassifier
 )
 from sklearn.neural_network import MLPClassifier
-from sklearn.naive_bayes import MultinomialNB
+from scipy import stats
 from .features.data_exploration import DataExplorationAnalyzer
 
 # 配置日志
@@ -285,16 +281,16 @@ class SSQAnalyzer:
         """
         try:
             # 获取历史数据
-            data = self.data_fetcher.fetch_history(periods)
+            fetched_data = self.data_fetcher.fetch_history(periods)
             
             # 执行各项分析
             results = {
-                'frequency': self.analyze_frequency(data),
-                'hot_cold': self.analyze_hot_cold_numbers(data),
-                'missing': self.analyze_missing_numbers(data),
-                'trends': self.analyze_trends(data),
-                'combinations': self.analyze_combinations(data),
-                'exploration': self.explore_data(data),  # 新增数据探索结果
+                'frequency': self.analyze_frequency(fetched_data),
+                'hot_cold': self.analyze_hot_cold_numbers(fetched_data),
+                'missing': self.analyze_missing_numbers(fetched_data),
+                'trends': self.analyze_trends(fetched_data),
+                'combinations': self.analyze_combinations(fetched_data),
+                'exploration': self.explore_data(fetched_data),  # 新增数据探索结果
                 'metadata': {
                     'analysis_time': datetime.now().isoformat(),
                     'periods_analyzed': periods
@@ -606,7 +602,6 @@ class SSQAnalyzer:
         """
         try:
             # 获取最近100期数据进行分析
-            data = self.data_fetcher.fetch_history(100)
             
             # 进行全面分析
             analysis = self.analyze_all(100).data

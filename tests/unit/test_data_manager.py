@@ -1,9 +1,6 @@
 import unittest
 from unittest.mock import patch, mock_open, MagicMock
 import pandas as pd
-import numpy as np
-import json
-import os
 from src.data.data_manager import DataManager
 
 class TestDataManager(unittest.TestCase):

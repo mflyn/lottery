@@ -1,9 +1,7 @@
 import pandas as pd
-from typing import Dict, List
+from typing import Dict
 import json
-import csv
 from pathlib import Path
-import xlsxwriter
 
 class DataExporter:
     """数据导出工具类"""
@@ -26,7 +24,6 @@ class DataExporter:
             data.to_excel(writer, sheet_name='数据', index=False)
             
             # 获取workbook和worksheet对象
-            workbook = writer.book
             worksheet = writer.sheets['数据']
             
             # 设置列宽

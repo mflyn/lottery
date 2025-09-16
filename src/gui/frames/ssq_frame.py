@@ -406,7 +406,7 @@ class SSQFrame(ttk.Frame):
                     f'{number["score"]:.2f}'
                 ))
                 
-        except ValueError as e:
+        except ValueError:
             messagebox.showerror('错误', '请输入有效的参数值')
         except Exception as e:
             messagebox.showerror('错误', f'生成号码失败: {str(e)}')

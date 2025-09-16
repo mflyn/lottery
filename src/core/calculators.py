@@ -6,7 +6,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Tuple
+from typing import Dict
 import itertools
 from .models import DLTNumber, SSQNumber
 

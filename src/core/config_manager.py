@@ -6,7 +6,6 @@
 统一管理应用程序的所有配置项
 """
 
-import os
 import json
 import logging
 from pathlib import Path

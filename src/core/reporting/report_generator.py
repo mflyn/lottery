@@ -1,8 +1,6 @@
 from typing import Dict, Any
 import pandas as pd
-import matplotlib.pyplot as plt
 from datetime import datetime
-import json
 
 class ReportGenerator:
     """报告生成器"""

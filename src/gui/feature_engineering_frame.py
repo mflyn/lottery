@@ -1,13 +1,11 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
-import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from typing import Optional, TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 from ..core.features.feature_storage import FeatureStorage
 from ..core.features.feature_engineering import FeatureEngineering
-from src.core.data_manager import LotteryDataManager
 from src.core.feature_engineer import FeatureEngineer
 
 if TYPE_CHECKING:
@@ -230,7 +228,6 @@ class FeatureEngineeringFrame(ttk.Frame):
             return
             
         try:
-            scaler_type = self.scaler_type.get()
             self.features_df = self.fe.scale_features(self.features_df)
             self._update_info("特征标准化完成")
             self._show_feature_info()
@@ -286,14 +283,14 @@ class FeatureEngineeringFrame(ttk.Frame):
     def _show_feature_info(self):
         """显示特征信息"""
         if self.features_df is not None:
-            info = f"特征集信息:\n"
+            info = "特征集信息:\n"
             info += f"特征数量: {len(self.features_df.columns)}\n"
             info += f"样本数量: {len(self.features_df)}\n"
-            info += f"\n特征列表:\n"
+            info += "\n特征列表:\n"
             for col in self.features_df.columns:
                 info += f"- {col}\n"
                 
-            info += f"\n基本统计信息:\n"
+            info += "\n基本统计信息:\n"
             info += self.features_df.describe().to_string()
             
             self._update_info(info)
@@ -478,10 +475,14 @@ class FeatureEngineeringFrame(ttk.Frame):
             self.data_tree.heading(col_id, text=col_name, anchor=tk.W)
             # 简单设置宽度
             width = 80
-            if 'ratio' in col_id: width = 60
-            elif 'sum' in col_id: width = 60
-            elif 'date' in col_id: width = 100
-            elif 'numbers' in col_id: width = 120 # 号码列宽一点
+            if 'ratio' in col_id:
+                width = 60
+            elif 'sum' in col_id:
+                width = 60
+            elif 'date' in col_id:
+                width = 100
+            elif 'numbers' in col_id:
+                width = 120 # 号码列宽一点
             self.data_tree.column(col_id, anchor=tk.W, width=width, stretch=tk.YES) # 允许列伸缩
 
         # 插入数据

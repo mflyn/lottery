@@ -1,6 +1,6 @@
 from typing import Dict, List
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from .base_validator import BaseValidator, ValidationRule
 
 class HistoryValidator(BaseValidator):

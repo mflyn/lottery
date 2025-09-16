@@ -1,6 +1,5 @@
-import requests
 import pandas as pd
-from typing import List, Dict, Optional
+from typing import Dict
 from datetime import datetime
 from src.utils.logger import Logger
 

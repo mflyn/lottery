@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Dict, Optional
+from typing import Dict
 from pathlib import Path
 
 class I18nManager:

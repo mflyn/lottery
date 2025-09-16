@@ -1,5 +1,4 @@
 import unittest
-from src.core.generators.base import NumberGenerator
 from src.core.generators.random_generator import RandomGenerator
 
 class TestRandomGenerator(unittest.TestCase):

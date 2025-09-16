@@ -1,7 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
-import pandas as pd
-import numpy as np
+from unittest.mock import patch
 from src.utils.error_handler import ErrorHandler
 from src.core.features.feature_engineering import FeatureEngineering
 

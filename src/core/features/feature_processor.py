@@ -1,9 +1,5 @@
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Optional
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.decomposition import PCA
-from sklearn.feature_selection import SelectKBest, mutual_info_regression
 
 class FeatureProcessor:
     """特征处理器基类"""

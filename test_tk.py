@@ -1,7 +1,7 @@
+import tkinter as tk
 import sys
 print("当前Python解释器路径:", sys.executable)
 print("当前Python版本:", sys.version)
-import tkinter as tk
 
 root = tk.Tk()
 root.title("Tkinter 测试")

@@ -31,7 +31,7 @@ class PerformanceTests(unittest.TestCase):
         
         # 测试执行时间
         start_time = time.time()
-        features = self.fe.generate_features(data)
+        self.fe.generate_features(data)
         end_time = time.time()
         
         # 记录最终内存

@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import pandas as pd
 from ..core.preprocessing.data_preprocessor import DataPreprocessor
 
 class PreprocessingWindow(tk.Toplevel):

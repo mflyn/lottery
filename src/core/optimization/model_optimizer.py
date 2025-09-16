@@ -1,8 +1,8 @@
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import SelectKBest, mutual_info_classif, RFE
 from sklearn.metrics import make_scorer, accuracy_score, precision_score, recall_score
-import numpy as np
-from typing import Dict, Any, Tuple, List
+import pandas as pd
+from typing import Dict, Any, Tuple
 import matplotlib.pyplot as plt
 
 class ModelOptimizer:

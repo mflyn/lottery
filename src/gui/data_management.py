@@ -1,9 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import pandas as pd
-from typing import Optional
 import json
-import csv
 
 class DataManagementFrame(ttk.Frame):
     """数据管理框架"""

@@ -10,7 +10,6 @@ from typing import List, Dict
 from collections import Counter
 import pandas as pd
 import numpy as np
-from .models import DLTNumber, SSQNumber
 
 class LotteryAnalyzer(ABC):
     """彩票数据分析器基类"""
@@ -147,10 +146,14 @@ class PatternAnalyzer:
 
         # 定义大小分界线
         small_large_threshold = 0
-        if self.lottery_type == 'ssq' and area == 'red': small_large_threshold = 17 # 1-16 小, 17-33 大
-        elif self.lottery_type == 'dlt' and area == 'front': small_large_threshold = 18 # 1-17 小, 18-35 大
-        elif self.lottery_type == 'ssq' and area == 'blue': small_large_threshold = 9  # 1-8 小, 9-16 大
-        elif self.lottery_type == 'dlt' and area == 'back': small_large_threshold = 7  # 1-6 小, 7-12 大
+        if self.lottery_type == 'ssq' and area == 'red':
+            small_large_threshold = 17 # 1-16 小, 17-33 大
+        elif self.lottery_type == 'dlt' and area == 'front':
+            small_large_threshold = 18 # 1-17 小, 18-35 大
+        elif self.lottery_type == 'ssq' and area == 'blue':
+            small_large_threshold = 9  # 1-8 小, 9-16 大
+        elif self.lottery_type == 'dlt' and area == 'back':
+            small_large_threshold = 7  # 1-6 小, 7-12 大
 
         if small_large_threshold > 0:
             small_count = sum(1 for n in numbers if n < small_large_threshold)

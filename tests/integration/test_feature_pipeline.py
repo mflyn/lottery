@@ -5,14 +5,11 @@ import pytest
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from src.core.features.feature_pipeline import FeaturePipeline
 
 # 添加项目根目录到 Python 路径
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
-
-from src.core.features.feature_pipeline import FeaturePipeline
-from src.core.features.feature_validator import FeatureValidator
-from src.core.utils.progress_tracker import ProgressTracker
 
 class TestFeaturePipeline:
     def setUp(self):
@@ -34,10 +31,6 @@ class TestFeaturePipeline:
     def test_feature_engineering_pipeline(self):
         """测试特征工程完整流程"""
         # 准备测试数据
-        test_data = pd.DataFrame({
-            'number': np.random.randint(1, 100, 100),
-            'value': np.random.normal(100, 10, 100)
-        })
         
         # 初始化特征流水线
         pipeline = FeaturePipeline()

@@ -1,7 +1,6 @@
 import pandas as pd
-import numpy as np
+import plotly.graph_objects as go
 from typing import Dict, Any
-from ..models.lottery_types import SSQNumber
 
 # 定义错误类
 class SSQError(Exception):

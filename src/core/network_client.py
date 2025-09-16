@@ -7,9 +7,8 @@
 """
 
 import requests
-import time
 import logging
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from .config_manager import get_config_manager

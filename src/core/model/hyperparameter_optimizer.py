@@ -1,5 +1,4 @@
 from typing import Dict, Any
-import numpy as np
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import make_scorer, mean_squared_error
 

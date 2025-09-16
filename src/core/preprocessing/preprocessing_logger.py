@@ -205,7 +205,7 @@ class PreprocessingLogger:
             ".warning { color: orange; }",
             "</style></head><body>",
             "<h1>数据预处理报告</h1>",
-            f"<h2>处理摘要</h2>",
+            "<h2>处理摘要</h2>",
             f"<p>处理时长: {summary['duration']:.2f} 秒</p>",
             f"<p>操作数量: {summary['operation_count']}</p>",
             f"<p>错误数量: {summary['error_count']}</p>",

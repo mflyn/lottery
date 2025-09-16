@@ -2,8 +2,6 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 import markdown2
-import webbrowser
-from pathlib import Path
 
 class HelpWindow:
     """帮助窗口"""

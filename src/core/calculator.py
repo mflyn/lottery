@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List
 from dataclasses import dataclass
 from src.utils.logger import Logger
 

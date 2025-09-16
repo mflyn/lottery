@@ -1,3 +1,8 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+from typing import Dict
+from matplotlib.figure import Figure
+
 class LotteryDataVisualizer:
     """彩票数据可视化器"""
     

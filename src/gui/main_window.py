@@ -35,12 +35,12 @@ except Exception as e_mac:
             print("*** 建议：请尝试安装 'Source Han Sans' (思源黑体) 或其他中文字体。***\n")
 # --- 配置结束 ---
 
-from src.core.ssq_calculator import SSQCalculator, SSQBetResult
-from src.core.dlt_calculator import DLTCalculator, DLTBetResult # 导入大乐透计算器
+from src.core.ssq_calculator import SSQCalculator
+from src.core.dlt_calculator import DLTCalculator # 导入大乐透计算器
 from src.core.data_manager import LotteryDataManager # 导入数据管理器
 from src.core.analyzer import LotteryAnalyzer # LotteryAnalyzer 在这里
-from src.core.analyzers import FrequencyAnalyzer, PatternAnalyzer # 其他分析器在这里
-import pandas as pd
+from src.core.analyzers import FrequencyAnalyzer, PatternAnalyzer, DLTAnalyzer # 其他分析器在这里
+from src.core.ssq_analyzer import SSQAnalyzer
 from src.gui.generation_frame import GenerationFrame # 导入新的 Frame
 from src.gui.feature_engineering_frame import FeatureEngineeringFrame # 导入特征工程 Frame
 
@@ -313,7 +313,7 @@ class SSQFrame(ttk.Frame):
                 # 如果是刚好 6 红 1 蓝，按单式处理 (调用旧方法，但返回格式统一)
                 if len(bet_red) == 6 and len(bet_blue) == 1:
                     level, amount = self.calculator.check_prize(bet_red + bet_blue, draw_numbers)
-                    prize_summary = {l: (1 if l == level else 0) for l in range(1, 7)}
+                    prize_summary = {lvl: (1 if lvl == level else 0) for lvl in range(1, 7)}
                     check_type = "单式"
                 # 否则按复式处理
                 else:
@@ -335,7 +335,6 @@ class SSQFrame(ttk.Frame):
                         if count > 0:
                             # 从 PRIZE_LEVELS 获取单注奖金用于估算总额
                             # 注意：浮动奖金无法精确计算
-                            prize_info = self.calculator.PRIZE_LEVELS.get((0,0)) # Placeholder key to find level info
                             # Need to find the actual key based on level which check_prize does internally. This is complex.
                             # Let's find the first key that matches the level for approximate prize amount
                             level_prize = 0
@@ -343,7 +342,8 @@ class SSQFrame(ttk.Frame):
                             for (r, b), info in self.calculator.PRIZE_LEVELS.items():
                                 if info[0] == level:
                                      level_prize = info[1]
-                                     if level <= 2 : level_desc += "(浮动奖金)"
+                                     if level <= 2:
+                                         level_desc += "(浮动奖金)"
                                      break
                             result_lines.append(f"  - {level_desc}: {count} 注 x {level_prize} 元 (约)")
                             total_amount += count * level_prize # 估算总奖金
@@ -655,7 +655,7 @@ class DLTFrame(ttk.Frame):
                 # 如果是刚好 5 前 2 后，按单式处理
                 if len(bet_front) == 5 and len(bet_back) == 2:
                     level, amount = self.calculator.check_prize(bet_front + bet_back, draw_numbers, is_add)
-                    prize_summary = {l: (1 if l == level else 0) for l in range(1, 10)}
+                    prize_summary = {lvl: (1 if lvl == level else 0) for lvl in range(1, 10)}
                     check_type = "单式"
                 # 否则按复式处理
                 else:
@@ -1051,7 +1051,8 @@ class DataAnalysisFrame(ttk.Frame):
                 # 需要调整或转换
                 # 暂时先尝试直接传递 DataFrame，看是否出错，后续再调整
                 processed_data = self.preprocess_data(self.history_data.copy(), lottery_type)
-                if processed_data is None: return # 预处理失败
+                if processed_data is None:
+                    return # 预处理失败
 
                 # --- 调用 analyze 方法 --- >
                 results = None
@@ -1286,7 +1287,7 @@ class LotteryToolsGUI:
         try:
             # self.root.iconbitmap("resources/icon.ico")
             pass
-        except:
+        except Exception:
             pass
     
     def _create_application(self):
@@ -1309,7 +1310,7 @@ class LotteryToolsGUI:
         try:
             self.root.quit()
             self.root.destroy()
-        except:
+        except Exception:
             pass
 
 if __name__ == "__main__":

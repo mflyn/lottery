@@ -1,4 +1,5 @@
 # 使用示例
+from .preprocessing_logger import PreprocessingLogger
 logger = PreprocessingLogger()
 
 # 记录数据统计

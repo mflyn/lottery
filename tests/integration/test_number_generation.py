@@ -1,6 +1,5 @@
 import unittest
 import pandas as pd
-from src.core.models.lottery_number import LotteryNumber, DLTNumber, SSQNumber
 from src.core.number_generator import LotteryNumberGenerator
 from src.core.analyzers import PatternAnalyzer, FrequencyAnalyzer
 

@@ -1,9 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
-import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from typing import Dict, List
 
 class StatisticalAnalysisFrame(ttk.Frame):
     """统计分析框架"""

@@ -3,7 +3,6 @@ from tkinter import ttk
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import pandas as pd
-import seaborn as sns
 
 class DataExplorationFrame(ttk.Frame):
     def __init__(self, master, data: pd.DataFrame):

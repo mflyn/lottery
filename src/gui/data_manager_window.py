@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
-import pandas as pd
 from ..core.validators.history_validator import HistoryValidator
 
 class DataManagerWindow(tk.Toplevel):

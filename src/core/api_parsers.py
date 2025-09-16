@@ -7,11 +7,8 @@ API数据解析器
 """
 
 import re
-import json
 import logging
-import pandas as pd
 from typing import Dict, List, Optional, Any
-from datetime import datetime
 from bs4 import BeautifulSoup
 
 class APIParser:
@@ -459,7 +456,7 @@ class SimpleAPIParser(APIParser):
                                         'first_prize_num': '0',
                                         'first_prize_amount': '0'
                                     })
-                        except (ValueError, IndexError) as e:
+                        except (ValueError, IndexError):
                             continue
             
             return results
@@ -515,7 +512,7 @@ class SimpleAPIParser(APIParser):
                                     'first_prize_num': str(item.get('first_prize_num', '0')),
                                     'first_prize_amount': str(item.get('first_prize_amount', '0'))
                                 })
-                except (ValueError, KeyError) as e:
+                except (ValueError, KeyError):
                     continue
             
             return results

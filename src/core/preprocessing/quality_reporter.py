@@ -1,6 +1,5 @@
-from typing import Dict, List
+from typing import Dict
 import pandas as pd
-import numpy as np
 from datetime import datetime
 import json
 

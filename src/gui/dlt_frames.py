@@ -7,7 +7,7 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-from typing import List, Set
+from typing import Set
 from ..core.generators.base_generator import RandomGenerator, LotteryNumber
 from src.core.validators.number_validator import NumberValidator
 
@@ -233,7 +233,7 @@ class DLTComplexBetFrame(ttk.Frame):
         amount = total * 2
         
         # 显示结果
-        result = f"已选号码:\n"
+        result = "已选号码:\n"
         result += f"前区: {sorted(self.selected_front)}\n"
         result += f"后区: {sorted(self.selected_back)}\n"
         result += f"共{total}注, 金额{amount}元"
@@ -464,7 +464,7 @@ class DLTDantuoBetFrame:
         amount = total * 2
         
         # 显示结果
-        result = f"已选号码:\n"
+        result = "已选号码:\n"
         result += f"前区胆码: {sorted(self.selected_front_dan)}\n"
         result += f"前区拖码: {sorted(self.selected_front_tuo)}\n"
         result += f"后区胆码: {sorted(self.selected_back_dan)}\n"

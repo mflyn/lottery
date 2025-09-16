@@ -10,6 +10,7 @@ from tkinter import ttk, messagebox
 from typing import List, Set
 from src.core.generators.base_generator import RandomGenerator, LotteryNumber
 from src.core.validators.number_validator import NumberValidator
+from src.core.ssq_analyzer import SSQAnalyzer
 
 class SSQComplexBetFrame(ttk.Frame):
     """双色球复式投注界面"""
@@ -539,7 +540,7 @@ class SSQDantuoBetFrame:
         amount = total * 2
         
         # 显示结果
-        result = f"已选号码:\n"
+        result = "已选号码:\n"
         if self.selected_red_dan:
             result += f"红球胆码: {sorted(self.selected_red_dan)}\n"
         result += f"红球拖码: {sorted(self.selected_red_tuo)}\n"

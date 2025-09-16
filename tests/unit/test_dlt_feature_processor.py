@@ -1,6 +1,5 @@
 import unittest
 import pandas as pd
-import numpy as np
 from src.core.features.dlt_feature_processor import DLTFeatureProcessor
 
 class TestDLTFeatureProcessor(unittest.TestCase):

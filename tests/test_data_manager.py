@@ -4,7 +4,7 @@ import os
 import tempfile
 import shutil
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from src.core.data_manager import LotteryDataManager
 
 class TestDataManager(unittest.TestCase):

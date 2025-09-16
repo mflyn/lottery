@@ -1,6 +1,4 @@
-from typing import Dict, List
 import pandas as pd
-import numpy as np
 
 class SSQFeatureProcessor:
     """双色球特征处理器"""

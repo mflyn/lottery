@@ -1,5 +1,4 @@
-from typing import List, Dict, Any
-import numpy as np
+from typing import List
 from sklearn.ensemble import VotingRegressor, StackingRegressor
 from sklearn.model_selection import cross_val_score
 

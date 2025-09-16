@@ -1,6 +1,5 @@
-from typing import List, Dict
+from typing import Dict
 import pandas as pd
-import numpy as np
 from sklearn.feature_selection import mutual_info_regression, SelectKBest
 from sklearn.preprocessing import StandardScaler
 

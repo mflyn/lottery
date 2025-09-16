@@ -7,8 +7,6 @@
 
 import requests
 from typing import Dict, Optional
-from datetime import datetime
-import json
 
 class DLTDataFetcher:
     """大乐透数据获取器"""

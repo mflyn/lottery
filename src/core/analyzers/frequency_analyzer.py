@@ -1,7 +1,5 @@
 import pandas as pd
 from typing import Dict, List, Any, Optional
-from collections import Counter
-import numpy as np
 
 from .base_analyzer import BaseAnalyzer
 from ..exceptions import AnalysisError
