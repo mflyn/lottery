@@ -1249,9 +1249,9 @@ class LotteryApp:
 
         # 添加特征工程标签页
         # 需要传递 DataManager 实例
-        self.feature_tab = FeatureEngineeringFrame(self.notebook)
-        self.feature_tab.set_data_manager(self.analysis_tab.data_manager) # 调用 setter 传递
-        self.notebook.add(self.feature_tab, text="特征工程")
+        # self.feature_tab = FeatureEngineeringFrame(self.notebook)
+        # self.feature_tab.set_data_manager(self.analysis_tab.data_manager) # 调用 setter 传递
+        # self.notebook.add(self.feature_tab, text="特征工程")
 
         self.notebook.pack(expand=True, fill='both', padx=10, pady=10)
 

@@ -47,11 +47,11 @@ class GenerationFrame(ttk.Frame):
 
         # 生成策略 (后续添加)
         self.strategy_map = {
-            "智能推荐": "smart_recommend",
+            "统计优选": "smart_recommend",
             "随机生成": "random",
             "冷热号推荐": "hot_cold"
         }
-        self.strategy_var = tk.StringVar(value="智能推荐") # 默认智能推荐
+        self.strategy_var = tk.StringVar(value="统计优选") # 默认统计优选
         self.strategy_combo = ttk.Combobox(config_frame, textvariable=self.strategy_var, values=list(self.strategy_map.keys()), state="readonly")
         self.strategy_combo.grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="w")
         
@@ -139,17 +139,24 @@ class GenerationFrame(ttk.Frame):
         generated_sets = []
         error_msg = None
         try:
-            history_data = self.data_manager.get_history_data(lottery_type)
-            if history_data.empty or len(history_data) < 100: # ML models need more data
-                raise ValueError(f"历史数据不足 ({len(history_data)} 条)，无法执行智能推荐。请先更新数据。")
-
-            recommender = SmartRecommender()
-            # The recommender might need the raw dataframe, not the preprocessed one
-            recommendations = recommender.generate_recommendations(history_data, num_recommendations=num_sets)
+            # ------------------- 算法替换开始 -------------------
+            # 1. 导入我们自己的生成器工厂
+            from src.core.generators.factory import create_generator
             
-            # The output of smart recommender is different, we need to adapt it
-            for rec in recommendations:
-                generated_sets.append(rec['numbers'])
+            # 2. 创建我们全新的'smart'精英生成器
+            smart_generator = create_generator('smart', lottery_type)
+            
+            # 3. 调用生成方法, 这将触发后台的"精英选拔"过程
+            #    (后台日志会打印"正在进行..."信息)
+            elite_numbers = smart_generator.generate(count=num_sets)
+            
+            # 4. 将新算法的输出格式适配到GUI期望的格式
+            for num_obj in elite_numbers:
+                if lottery_type == 'ssq':
+                    generated_sets.append({'red': num_obj.red, 'blue': num_obj.blue})
+                elif lottery_type == 'dlt':
+                    generated_sets.append({'front': num_obj.front, 'back': num_obj.back})
+            # ------------------- 算法替换结束 -------------------
 
         except Exception as e:
             error_msg = str(e)

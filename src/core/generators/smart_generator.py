@@ -1,404 +1,183 @@
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Union
 from collections import Counter
+import random
 from .random_generator import RandomGenerator
-from ..models import LotteryNumber
-from ..features.feature_engineering import FeatureEngineering
+from ..models import LotteryNumber, SSQNumber, DLTNumber
+from ..ranking import rank_and_select_best, rank_and_select_best_dlt
 from ..data_manager import LotteryDataManager
 
 class SmartNumberGenerator:
-    """智能号码推荐生成器"""
+    """智能号码推荐生成器 - 支持双色球(SSQ)和大乐透(DLT)的精英选拔版"""
     
     def __init__(self, lottery_type: str):
         self.lottery_type = lottery_type
         self.random_generator = RandomGenerator(lottery_type)
         self.data_manager = LotteryDataManager()
-        self.feature_engineering = FeatureEngineering()
         
-        # 配置参数
         self.config = {
-            'dlt': {
-                'front_range': (1, 35),
-                'back_range': (1, 12),
-                'hot_threshold': 0.6,  # 热号出现频率阈值
-                'cold_threshold': 0.3,  # 冷号出现频率阈值
-                'analysis_periods': 30  # 分析最近期数
-            },
             'ssq': {
-                'red_range': (1, 33),
-                'blue_range': (1, 16),
-                'hot_threshold': 0.6,
-                'cold_threshold': 0.3,
-                'analysis_periods': 30
+                'analysis_periods': 100,
+                'batch_size_per_elite': 10,
+                'recipes': [(2, 1, 3)] * 5 + [(2, 0, 4)] * 3 + [(3, 0, 3)] * 2
+            },
+            'dlt': {
+                'analysis_periods': 100,
+                'batch_size_per_elite': 10,
+                'front_recipes': [(2, 1, 2)] * 5 + [(2, 2, 1)] * 3 + [(3, 1, 1)] * 2, # 5个前区号的配方
+                'back_recipe': (1, 1, 0) # 2个后区号的配方 (1热,1温,0冷)
             }
         }
 
     def generate(self, count: int = 1, **kwargs) -> List[LotteryNumber]:
-        """生成号码（兼容接口）
-        
-        Args:
-            count: 需要生成的号码组数
-            **kwargs: 其他参数
-            
-        Returns:
-            生成的号码列表
-        """
+        """生成号码（兼容接口）"""
         try:
             return self.generate_recommended(count)
-        except Exception:
-            # 如果智能生成失败，回退到随机生成
+        except Exception as e:
+            print(f"智能生成过程发生严重错误: {e}")
+            import traceback
+            traceback.print_exc()
             return self.random_generator.generate(count)
 
     def generate_recommended(self, count: int = 1) -> List[LotteryNumber]:
-        """生成推荐号码
-        
-        Args:
-            count: 需要生成的号码组数
-        """
-        try:
-            # 获取历史数据
-            history_data = self.data_manager.get_history_data(self.lottery_type)
-            
-            # 如果没有历史数据，使用随机生成
-            if history_data is None or history_data.empty:
-                return self.random_generator.generate(count)
-            
-            # 特征工程
-            features = self.feature_engineering.generate_features(history_data)
-            
-            # 分析热冷号
-            hot_cold_numbers = self._analyze_hot_cold_numbers(history_data)
-            
-            # 分析号码间隔
-            gap_patterns = self._analyze_gap_patterns(history_data)
-            
-            # 生成符合模式的号码
-            numbers = []
-            for _ in range(count):
-                number = self._generate_smart_number(
-                    hot_cold_numbers,
-                    gap_patterns,
-                    features
-                )
-                numbers.append(number)
-                
-            return numbers
-        except Exception:
-            # 如果智能生成失败，回退到随机生成
+        """生成精英推荐号码, 每一注都是优中选优的结果."""
+        conf = self.config[self.lottery_type]
+        history_data = self.data_manager.get_history_data(self.lottery_type)
+        if history_data is None or history_data.empty or len(history_data) < conf['analysis_periods']:
             return self.random_generator.generate(count)
-    
-    def _generate_smart_number(self, 
-                             hot_cold_numbers: Dict,
-                             gap_patterns: Dict,
-                             features: Dict) -> LotteryNumber:
-        """根据分析结果生成智能号码"""
-        if self.lottery_type == 'dlt':
-            # 根据热冷号比例选择前区号码
-            front_numbers = self._select_numbers_by_pattern(
-                hot_cold_numbers['front'],
-                5,
-                (1, 35)
-            )
-            
-            # 根据热冷号比例选择后区号码
-            back_numbers = self._select_numbers_by_pattern(
-                hot_cold_numbers['back'],
-                2,
-                (1, 12)
-            )
-            
-            return LotteryNumber(front=sorted(front_numbers), 
-                               back=sorted(back_numbers))
         
-        else:  # ssq
-            # 根据热冷号比例选择红球号码
-            red_numbers = self._select_numbers_by_pattern(
-                hot_cold_numbers['red'],
-                6,
-                (1, 33)
-            )
+        hot_cold_numbers = self._analyze_hot_cold_numbers(history_data)
+        
+        recipes = conf.get('recipes') or conf.get('front_recipes')
+        random.shuffle(recipes)
+
+        ranking_function = rank_and_select_best if self.lottery_type == 'ssq' else rank_and_select_best_dlt
+
+        elite_numbers = []
+        for i in range(count):
+            print(f"正在为[{self.lottery_type.upper()}]进行第 {i+1}/{count} 注精英号码的选拔...")
+            candidates = []
+            batch_size = conf['batch_size_per_elite']
+            for j in range(batch_size):
+                recipe = recipes[j % len(recipes)]
+                candidate = self._generate_one_candidate(hot_cold_numbers, recipe)
+                candidates.append(candidate)
             
-            # 选择蓝球号码
+            elite_number = ranking_function(candidates)
+            if elite_number:
+                elite_numbers.append(elite_number)
+            else:
+                elite_numbers.append(random.choice(candidates))
+
+        return elite_numbers
+    
+    def _generate_one_candidate(self, hot_cold_numbers: Dict, recipe: Tuple[int, int, int]) -> Union[SSQNumber, DLTNumber]:
+        """根据分析结果和指定配方生成一个候选号码"""
+        if self.lottery_type == 'ssq':
+            red_numbers = self._select_numbers_by_pattern(hot_cold_numbers['red'], recipe, (1, 33))
             blue_number = self._select_blue_number(hot_cold_numbers['blue'])
-            
-            return LotteryNumber(red=sorted(red_numbers), 
-                               blue=blue_number)
+            return SSQNumber(red=sorted(red_numbers), blue=blue_number)
+        
+        elif self.lottery_type == 'dlt':
+            front_numbers = self._select_numbers_by_pattern(hot_cold_numbers['front'], recipe, (1, 35))
+            back_numbers = self._select_numbers_by_pattern(hot_cold_numbers['back'], self.config['dlt']['back_recipe'], (1, 12))
+            return DLTNumber(front=sorted(front_numbers), back=sorted(back_numbers))
 
     def _analyze_hot_cold_numbers(self, data: pd.DataFrame) -> Dict:
-        """分析热冷号分布
-        
-        Args:
-            data: 历史开奖数据DataFrame
-        
-        Returns:
-            Dict: 包含热冷号分析结果的字典
-        """
-        recent_data = data.head(self.config[self.lottery_type]['analysis_periods'])
-        
-        if self.lottery_type == 'dlt':
-            # 分析前区号码
-            front_numbers = []
-            for _, row in recent_data.iterrows():
-                front_numbers.extend(row['front_numbers'])
-            front_counter = Counter(front_numbers)
-            
-            # 计算出现频率
-            front_freq = {
-                num: count / self.config[self.lottery_type]['analysis_periods']
-                for num, count in front_counter.items()
-            }
-            
-            # 分类热冷号
-            front_hot = [num for num, freq in front_freq.items() 
-                        if freq >= self.config[self.lottery_type]['hot_threshold']]
-            front_cold = [num for num, freq in front_freq.items()
-                         if freq <= self.config[self.lottery_type]['cold_threshold']]
-            front_normal = [num for num in range(1, 36)
-                          if num not in front_hot and num not in front_cold]
-            
-            # 后区分析
-            back_numbers = []
-            for _, row in recent_data.iterrows():
-                back_numbers.extend(row['back_numbers'])
-            back_counter = Counter(back_numbers)
-            
-            back_freq = {
-                num: count / self.config[self.lottery_type]['analysis_periods']
-                for num, count in back_counter.items()
-            }
-            
-            back_hot = [num for num, freq in back_freq.items()
-                       if freq >= self.config[self.lottery_type]['hot_threshold']]
-            back_cold = [num for num, freq in back_freq.items()
-                        if freq <= self.config[self.lottery_type]['cold_threshold']]
-            back_normal = [num for num in range(1, 13)
-                         if num not in back_hot and num not in back_cold]
-            
-            return {
-                'front': {
-                    'hot': front_hot,
-                    'cold': front_cold,
-                    'normal': front_normal,
-                    'frequencies': front_freq
-                },
-                'back': {
-                    'hot': back_hot,
-                    'cold': back_cold,
-                    'normal': back_normal,
-                    'frequencies': back_freq
-                }
-            }
-            
-        else:  # ssq
-            # 红球分析
-            red_numbers = []
-            for _, row in recent_data.iterrows():
-                red_numbers.extend(row['red_numbers'])
-            red_counter = Counter(red_numbers)
-            
-            # --- 新的基于百分位的冷热号定义 (New percentile-based definition) ---
-            # 获取所有33个号码的频次 (包括未出现的)
-            all_counts = {num: red_counter.get(num, 0) for num in range(1, 34)}
-            # 根据频次对号码进行排序
-            sorted_numbers = sorted(all_counts.keys(), key=lambda num: all_counts[num], reverse=True)
-            
-            # 根据排名定义冷热温号
-            red_hot = sorted_numbers[:7]    # 出现最多的前7个为热号
-            red_cold = sorted_numbers[-7:]   # 出现最少的后7个为冷号
-            red_normal = sorted_numbers[7:-7] # 中间的19个为温号
+        """使用Z-Score和EWMA混合模型分析冷热号分布."""
+        conf = self.config[self.lottery_type]
+        analysis_periods = conf['analysis_periods']
+        recent_data = data.head(analysis_periods)
 
-            # 保留频率字典供蓝球分析或其他地方使用
-            red_freq = {
-                num: count / self.config[self.lottery_type]['analysis_periods']
-                for num, count in red_counter.items()
-            }
-            
-            # 蓝球分析
-            blue_numbers = recent_data['blue_number'].tolist()
-            blue_counter = Counter(blue_numbers)
-            
-            blue_freq = {
-                num: count / self.config[self.lottery_type]['analysis_periods']
-                for num, count in blue_counter.items()
-            }
+        def get_hybrid_pools(numbers_data, num_total, p_ratio, hot_count, cold_count):
+            all_numbers = list(range(1, num_total + 1))
+            n = analysis_periods
+            mu = n * p_ratio
+            sigma = np.sqrt(n * p_ratio * (1 - p_ratio)) if n > 0 else 1
+            if sigma == 0: sigma = 1
+
+            counts = Counter(np.concatenate(numbers_data.values))
+            z_scores = {num: (counts.get(num, 0) - mu) / sigma for num in all_numbers}
+
+            s = pd.DataFrame(0, index=recent_data.index, columns=all_numbers)
+            for index, row_nums in numbers_data.items():
+                if isinstance(row_nums, list):
+                    s.loc[index, row_nums] = 1
+            ewma_scores = s.iloc[::-1].ewm(alpha=0.1, adjust=False).mean().iloc[-1].to_dict()
+
+            z_values = np.array(list(z_scores.values()))
+            norm_z = {num: (score - z_values.min()) / (z_values.max() - z_values.min()) if (z_values.max() - z_values.min()) > 0 else 0.5 for num, score in z_scores.items()}
+
+            ewma_values = np.array(list(ewma_scores.values()))
+            norm_ewma = {num: (score - ewma_values.min()) / (ewma_values.max() - ewma_values.min()) if (ewma_values.max() - ewma_values.min()) > 0 else 0.5 for num, score in ewma_scores.items()}
+
+            hybrid_scores = {num: 0.5 * norm_z[num] + 0.5 * norm_ewma[num] for num in all_numbers}
+            sorted_by_hybrid = sorted(hybrid_scores.keys(), key=lambda num: hybrid_scores[num], reverse=True)
             
             return {
-                'red': {
-                    'hot': red_hot,
-                    'cold': red_cold,
-                    'normal': red_normal,
-                    'frequencies': red_freq
-                },
-                'blue': {
-                    'frequencies': blue_freq
-                }
+                'hot': sorted_by_hybrid[:hot_count],
+                'cold': sorted_by_hybrid[-cold_count:] if cold_count > 0 else [],
+                'normal': sorted_by_hybrid[hot_count:-cold_count if cold_count > 0 else len(sorted_by_hybrid)]
             }
 
-    def _analyze_gap_patterns(self, data: pd.DataFrame) -> Dict:
-        """分析号码间隔模式
+        if self.lottery_type == 'ssq':
+            red_pools = get_hybrid_pools(recent_data['red_numbers'], 33, 6/33, 7, 7)
+            blue_freq = Counter(recent_data['blue_number'].tolist())
+            return {'red': red_pools, 'blue': {'frequencies': blue_freq}}
         
-        Args:
-            data: 历史开奖数据DataFrame
+        elif self.lottery_type == 'dlt':
+            front_pools = get_hybrid_pools(recent_data['front_numbers'], 35, 5/35, 7, 7) # 前区7热7冷
+            back_pools = get_hybrid_pools(recent_data['back_numbers'], 12, 2/12, 3, 3) # 后区3热3冷
+            return {'front': front_pools, 'back': back_pools}
         
-        Returns:
-            Dict: 包含号码间隔模式的字典
-        """
-        recent_data = data.head(self.config[self.lottery_type]['analysis_periods'])
-        
-        if self.lottery_type == 'dlt':
-            # 分析前区号码间隔
-            front_gaps = []
-            for _, row in recent_data.iterrows():
-                numbers = sorted(row['front_numbers'])
-                gaps = [numbers[i+1] - numbers[i] for i in range(len(numbers)-1)]
-                front_gaps.extend(gaps)
-            
-            # 计算间隔统计
-            front_gap_counter = Counter(front_gaps)
-            front_gap_prob = {
-                gap: count/sum(front_gap_counter.values())
-                for gap, count in front_gap_counter.items()
-            }
-            
-            # 后区间隔分析
-            back_gaps = []
-            for _, row in recent_data.iterrows():
-                numbers = sorted(row['back_numbers'])
-                if len(numbers) > 1:
-                    gaps = [numbers[i+1] - numbers[i] for i in range(len(numbers)-1)]
-                    back_gaps.extend(gaps)
-            
-            back_gap_counter = Counter(back_gaps)
-            back_gap_prob = {
-                gap: count/sum(back_gap_counter.values())
-                for gap, count in back_gap_counter.items()
-            }
-            
-            return {
-                'front': {
-                    'gaps': front_gap_prob,
-                    'avg_gap': np.mean(front_gaps),
-                    'std_gap': np.std(front_gaps)
-                },
-                'back': {
-                    'gaps': back_gap_prob,
-                    'avg_gap': np.mean(back_gaps),
-                    'std_gap': np.std(back_gaps)
-                }
-            }
-            
-        else:  # ssq
-            # 红球间隔分析
-            red_gaps = []
-            for _, row in recent_data.iterrows():
-                numbers = sorted(row['red_numbers'])
-                gaps = [numbers[i+1] - numbers[i] for i in range(len(numbers)-1)]
-                red_gaps.extend(gaps)
-            
-            red_gap_counter = Counter(red_gaps)
-            red_gap_prob = {
-                gap: count/sum(red_gap_counter.values())
-                for gap, count in red_gap_counter.items()
-            }
-            
-            return {
-                'red': {
-                    'gaps': red_gap_prob,
-                    'avg_gap': np.mean(red_gaps),
-                    'std_gap': np.std(red_gaps)
-                }
-            }
+        return {}
 
-    def _select_numbers_by_pattern(self,
-                                 pattern: Dict,
-                                 count: int,
-                                 num_range: Tuple[int, int]) -> List[int]:
-        """根据模式选择号码
-        
-        Args:
-            pattern: 号码模式字典
-            count: 需要选择的号码个数
-            num_range: 号码范围元组 (min, max)
-        
-        Returns:
-            List[int]: 选择的号码列表
-        """
+    def _select_numbers_by_pattern(self, pattern: Dict, recipe: Tuple[int, int, int], num_range: Tuple[int, int]) -> List[int]:
+        """根据指定的冷热温配方选择号码"""
+        hot_count, cold_count, normal_count = recipe
         numbers = []
-        all_numbers = list(range(num_range[0], num_range[1] + 1))
         
-        # 根据热冷号比例选择
-        hot_count = int(count * 0.4)  # 40%热号
-        cold_count = int(count * 0.2)  # 20%冷号
+        hot_pool = pattern.get('hot', [])
+        cold_pool = pattern.get('cold', [])
+        normal_pool = pattern.get('normal', [])
+
+        if hot_pool and hot_count > 0:
+            numbers.extend(np.random.choice(hot_pool, min(hot_count, len(hot_pool)), replace=False).tolist())
         
-        # 选择热号
-        if pattern['hot'] and hot_count > 0:
-            hot_numbers = np.random.choice(
-                pattern['hot'],
-                min(hot_count, len(pattern['hot'])),
-                replace=False
-            ).tolist()
-            numbers.extend(hot_numbers)
+        if cold_pool and cold_count > 0:
+            available_cold = [n for n in cold_pool if n not in numbers]
+            if available_cold:
+                numbers.extend(np.random.choice(available_cold, min(cold_count, len(available_cold)), replace=False).tolist())
         
-        # 选择冷号
-        if pattern['cold'] and cold_count > 0:
-            cold_numbers = np.random.choice(
-                pattern['cold'],
-                min(cold_count, len(pattern['cold'])),
-                replace=False
-            ).tolist()
-            numbers.extend(cold_numbers)
+        current_len = len(numbers)
+        needed = (hot_count + cold_count + normal_count) - current_len
+        if normal_pool and needed > 0:
+            available_normal = [n for n in normal_pool if n not in numbers]
+            if available_normal:
+                numbers.extend(np.random.choice(available_normal, min(needed, len(available_normal)), replace=False).tolist())
         
-        # 选择正常号
-        remaining_count = count - len(numbers)
-        if remaining_count > 0:
-            available_numbers = [n for n in pattern['normal'] 
-                               if n not in numbers]
+        final_remaining = (hot_count + cold_count + normal_count) - len(numbers)
+        if final_remaining > 0:
+            all_numbers = list(range(num_range[0], num_range[1] + 1))
+            available_numbers = [n for n in all_numbers if n not in numbers]
             if available_numbers:
-                normal_numbers = np.random.choice(
-                    available_numbers,
-                    min(remaining_count, len(available_numbers)),
-                    replace=False
-                ).tolist()
-                numbers.extend(normal_numbers)
-        
-        # 如果还不够数，从所有可用号码中随机选择
-        remaining_count = count - len(numbers)
-        if remaining_count > 0:
-            available_numbers = [n for n in all_numbers 
-                               if n not in numbers]
-            additional_numbers = np.random.choice(
-                available_numbers,
-                remaining_count,
-                replace=False
-            ).tolist()
-            numbers.extend(additional_numbers)
+                numbers.extend(np.random.choice(available_numbers, min(final_remaining, len(available_numbers)), replace=False).tolist())
         
         return numbers
 
     def _select_blue_number(self, blue_pattern: Dict) -> int:
-        """选择蓝球号码
-        
-        Args:
-            blue_pattern: 蓝球频率字典
-        
-        Returns:
-            int: 选择的蓝球号码
-        """
-        frequencies = blue_pattern['frequencies']
+        """选择SSQ蓝球号码"""
+        frequencies = blue_pattern.get('frequencies', {})
+        if not frequencies:
+            return np.random.randint(1, 17)
+
         numbers = list(frequencies.keys())
         probabilities = list(frequencies.values())
         
-        # 归一化概率
         total_prob = sum(probabilities)
         if total_prob > 0:
             probabilities = [p/total_prob for p in probabilities]
-            
-            # 根据概率选择号码
             return int(np.random.choice(numbers, p=probabilities))
         else:
-            # 如果没有频率数据，随机选择
-            if self.lottery_type == 'dlt':
-                return np.random.randint(1, 13)
-            else:  # ssq
-                return np.random.randint(1, 17)
+            return np.random.randint(1, 17)
