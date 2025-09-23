@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import List, Set
 from src.core.generators.base_generator import RandomGenerator, LotteryNumber
+from src.core.generators.smart_generator import SmartNumberGenerator
 from src.core.validators.number_validator import NumberValidator
 from src.core.ssq_analyzer import SSQAnalyzer
 
@@ -18,7 +19,8 @@ class SSQComplexBetFrame(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
         self.parent = parent
-        self.generator = RandomGenerator('ssq')
+        # 使用改进的智能生成器替代随机生成器
+        self.generator = SmartNumberGenerator('ssq')
         self.selected_red = set()
         self.selected_blue = set()
         self.validator = NumberValidator('ssq')
@@ -217,11 +219,16 @@ class SSQComplexBetFrame(ttk.Frame):
         self.selected_red.clear()
         for btn in self.red_buttons.values():
             btn.configure(style='TButton')
-            
-        # 生成新号码
-        numbers = self.generator.generate_single()
-        red_numbers = numbers['red']
-        
+
+        # 使用智能生成器生成号码
+        numbers = self.generator.generate_recommended(1)
+        if numbers and hasattr(numbers[0], 'red'):
+            red_numbers = numbers[0].red
+        else:
+            # 降级到随机生成
+            import random
+            red_numbers = sorted(random.sample(range(1, 34), 6))
+
         # 更新选择状态
         for num in red_numbers:
             self.selected_red.add(num)
@@ -233,11 +240,16 @@ class SSQComplexBetFrame(ttk.Frame):
         self.selected_blue.clear()
         for btn in self.blue_buttons.values():
             btn.configure(style='TButton')
-            
-        # 生成新号码
-        numbers = self.generator.generate_single()
-        blue_number = numbers['blue'][0]
-        
+
+        # 使用智能生成器生成号码
+        numbers = self.generator.generate_recommended(1)
+        if numbers and hasattr(numbers[0], 'blue'):
+            blue_number = numbers[0].blue
+        else:
+            # 降级到随机生成
+            import random
+            blue_number = random.randint(1, 16)
+
         # 更新选择状态
         self.selected_blue.add(blue_number)
         self.blue_buttons[blue_number].configure(style='Selected.TButton')

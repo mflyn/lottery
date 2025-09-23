@@ -8,7 +8,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Set
-from ..core.generators.base_generator import RandomGenerator, LotteryNumber
+from src.core.generators.base_generator import RandomGenerator, LotteryNumber
+from src.core.generators.smart_generator import SmartNumberGenerator
 from src.core.validators.number_validator import NumberValidator
 
 class DLTComplexBetFrame(ttk.Frame):
@@ -17,7 +18,8 @@ class DLTComplexBetFrame(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
         self.parent = parent
-        self.generator = RandomGenerator('dlt')
+        # 使用改进的智能生成器替代随机生成器
+        self.generator = SmartNumberGenerator('dlt')
         self.selected_front = set()
         self.selected_back = set()
         self.validator = NumberValidator('dlt')
@@ -140,11 +142,16 @@ class DLTComplexBetFrame(ttk.Frame):
         self.selected_front.clear()
         for btn in self.front_buttons.values():
             btn.configure(style='TButton')
-            
-        # 生成新号码
-        numbers = self.generator.generate_single()
-        front_numbers = numbers['front']
-        
+
+        # 使用智能生成器生成号码
+        numbers = self.generator.generate_recommended(1)
+        if numbers and hasattr(numbers[0], 'front'):
+            front_numbers = numbers[0].front
+        else:
+            # 降级到随机生成
+            import random
+            front_numbers = sorted(random.sample(range(1, 36), 5))
+
         # 更新选择状态
         for num in front_numbers:
             self.selected_front.add(num)
@@ -156,11 +163,16 @@ class DLTComplexBetFrame(ttk.Frame):
         self.selected_back.clear()
         for btn in self.back_buttons.values():
             btn.configure(style='TButton')
-            
-        # 生成新号码
-        numbers = self.generator.generate_single()
-        back_numbers = numbers['back']
-        
+
+        # 使用智能生成器生成号码
+        numbers = self.generator.generate_recommended(1)
+        if numbers and hasattr(numbers[0], 'back'):
+            back_numbers = numbers[0].back
+        else:
+            # 降级到随机生成
+            import random
+            back_numbers = sorted(random.sample(range(1, 13), 2))
+
         # 更新选择状态
         for num in back_numbers:
             self.selected_back.add(num)

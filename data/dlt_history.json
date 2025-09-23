@@ -1,7 +1,83 @@
 {
-  "fetch_time": "2025-09-14 20:16:37",
-  "total_periods": 2773,
+  "fetch_time": "2025-09-22 23:33:54",
+  "total_periods": 2777,
   "data": [
+    {
+      "draw_num": "25109",
+      "draw_date": "2025-09-22",
+      "front_numbers": [
+        4,
+        8,
+        10,
+        13,
+        26
+      ],
+      "back_numbers": [
+        9,
+        10
+      ],
+      "prize_pool": "1,212,757,053.28",
+      "sales": "313,350,591",
+      "first_prize_num": "0",
+      "first_prize_amount": "0"
+    },
+    {
+      "draw_num": "25108",
+      "draw_date": "2025-09-20",
+      "front_numbers": [
+        14,
+        18,
+        21,
+        24,
+        29
+      ],
+      "back_numbers": [
+        3,
+        6
+      ],
+      "prize_pool": "1,188,449,971.10",
+      "sales": "341,209,503",
+      "first_prize_num": "0",
+      "first_prize_amount": "0"
+    },
+    {
+      "draw_num": "25107",
+      "draw_date": "2025-09-17",
+      "front_numbers": [
+        5,
+        7,
+        8,
+        15,
+        33
+      ],
+      "back_numbers": [
+        6,
+        10
+      ],
+      "prize_pool": "1,185,080,983.75",
+      "sales": "314,311,008",
+      "first_prize_num": "0",
+      "first_prize_amount": "0"
+    },
+    {
+      "draw_num": "25106",
+      "draw_date": "2025-09-15",
+      "front_numbers": [
+        5,
+        6,
+        11,
+        26,
+        29
+      ],
+      "back_numbers": [
+        5,
+        10
+      ],
+      "prize_pool": "1,199,200,033.49",
+      "sales": "314,630,148",
+      "first_prize_num": "0",
+      "first_prize_amount": "0"
+    },
     {
       "draw_num": "25105",
       "draw_date": "2025-09-13",

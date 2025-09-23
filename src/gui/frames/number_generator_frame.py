@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from src.core.strategy.number_generator import EnhancedNumberGenerator
 from src.core.generators.base_generator import RandomGenerator
+from src.core.generators.smart_generator import SmartNumberGenerator
 from src.core.data_manager import LotteryDataManager
 
 class NumberGeneratorFrame(ttk.Frame):
@@ -166,23 +167,52 @@ class NumberGeneratorFrame(ttk.Frame):
             # 获取历史数据
             history_data = self.data_manager.get_recent_draws(100)
             
-            if strategy in ['random', 'balanced', 'hot', 'cold']:
-                # 使用基础生成器
+            if strategy in ['random']:
+                # 使用基础随机生成器
                 generator = RandomGenerator(lottery_type)
                 numbers = [generator.generate_single(strategy=strategy) for _ in range(count)]
+            elif strategy in ['balanced', 'hot', 'cold', 'smart']:
+                # 使用改进的智能生成器
+                generator = SmartNumberGenerator(lottery_type)
+
+                # 根据策略调整算法配置
+                if strategy == 'hot':
+                    # 频率优先配置
+                    generator.set_blue_algorithm_config(
+                        method='enhanced',
+                        weights={'frequency': 0.6, 'missing': 0.2, 'trend': 0.1, 'pattern': 0.05, 'random': 0.05}
+                    )
+                elif strategy == 'cold':
+                    # 遗漏优先配置
+                    generator.set_blue_algorithm_config(
+                        method='enhanced',
+                        weights={'frequency': 0.2, 'missing': 0.6, 'trend': 0.1, 'pattern': 0.05, 'random': 0.05}
+                    )
+                elif strategy == 'balanced':
+                    # 平衡配置
+                    generator.set_blue_algorithm_config(method='ensemble')
+
+                # 生成号码
+                smart_numbers = generator.generate_recommended(count)
+                numbers = []
+                for num in smart_numbers:
+                    if lottery_type == 'ssq':
+                        numbers.append({'red': num.red, 'blue': num.blue})
+                    elif lottery_type == 'dlt':
+                        numbers.append({'front': num.front, 'back': num.back})
             else:
                 # 使用增强型生成器
                 generator = EnhancedNumberGenerator(
                     lottery_type=lottery_type,
                     history_data=history_data
                 )
-                
+
                 # 获取高级参数
                 params = {
                     'history_weight': float(self.history_weight.get()),
                     'pattern_weight': float(self.pattern_weight.get())
                 }
-                
+
                 # 生成号码
                 numbers = generator.generate_with_strategy(
                     strategy=strategy,
