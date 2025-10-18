@@ -8,6 +8,7 @@ from .random_generator import RandomGenerator
 from ..models import LotteryNumber, SSQNumber, DLTNumber
 from ..ranking import rank_and_select_best, rank_and_select_best_dlt
 from ..data_manager import LotteryDataManager
+from .anti_popular import PopularityDetector, CorrelationChecker, SequenceAnalyzer
 
 class SmartNumberGenerator:
     """智能号码推荐生成器 - 支持双色球(SSQ)和大乐透(DLT)的精英选拔版"""
@@ -42,6 +43,37 @@ class SmartNumberGenerator:
                 'batch_size_per_elite': 10,
                 'front_recipes': [(2, 1, 2)] * 5 + [(2, 2, 1)] * 3 + [(3, 1, 1)] * 2, # 5个前区号的配方
                 'back_recipe': (1, 1, 0) # 2个后区号的配方 (1热,1温,0冷)
+            }
+        }
+
+        # 去热门算法配置
+        self.anti_popular_config = {
+            'enabled': False,  # 是否启用去热门模式
+            'mode': 'moderate',  # 'strict'(严格), 'moderate'(适中), 'light'(轻度)
+
+            # SSQ配置
+            'ssq': {
+                'max_score': 2,              # 热门打分阈值（越小越严格）
+                'max_run': 2,                # 最大连号长度
+                'max_same_last_digit': 2,    # 同尾数最大计数
+                'odd_bounds': (2, 4),        # 奇数个数范围
+                'sum_bounds': (70, 140),     # 和值范围
+                'max_red_overlap': 2,        # 多注间红球最大重叠
+                'max_blue_dup': 1,           # 蓝球重复次数限制
+                'tries_per_ticket': 60       # 每注最大尝试次数
+            },
+
+            # DLT配置
+            'dlt': {
+                'max_score': 2,
+                'max_run': 2,
+                'max_same_last_digit': 2,
+                'odd_bounds': (1, 4),
+                'sum_bounds': (60, 120),
+                'max_front_overlap': 2,
+                'max_back_overlap': 1,
+                'avoid_back_consecutive': False,
+                'tries_per_ticket': 60
             }
         }
 
@@ -506,3 +538,323 @@ class SmartNumberGenerator:
 
         if analysis_periods and analysis_periods > 0:
             self.blue_algorithm_config['analysis_periods'] = analysis_periods
+
+    # ==================== 去热门算法相关方法 ====================
+
+    def set_anti_popular_config(self, enabled: bool = True, mode: str = 'moderate', **kwargs):
+        """
+        配置去热门算法
+
+        Args:
+            enabled: 是否启用去热门模式
+            mode: 预设模式 'strict'(严格), 'moderate'(适中), 'light'(轻度)
+            **kwargs: 自定义配置参数
+
+        Examples:
+            # 启用严格模式
+            generator.set_anti_popular_config(enabled=True, mode='strict')
+
+            # 自定义配置
+            generator.set_anti_popular_config(
+                enabled=True,
+                mode='moderate',
+                max_score=1,
+                max_run=1
+            )
+        """
+        self.anti_popular_config['enabled'] = enabled
+        self.anti_popular_config['mode'] = mode
+
+        # 根据模式预设参数
+        if mode == 'strict':
+            # 严格模式：最大程度避免热门
+            if self.lottery_type == 'ssq':
+                self.anti_popular_config['ssq'].update({
+                    'max_score': 1,
+                    'max_run': 1,
+                    'max_same_last_digit': 2,
+                    'max_red_overlap': 1,
+                    'max_blue_dup': 1,
+                    'tries_per_ticket': 80
+                })
+            elif self.lottery_type == 'dlt':
+                self.anti_popular_config['dlt'].update({
+                    'max_score': 1,
+                    'max_run': 1,
+                    'max_same_last_digit': 2,
+                    'max_front_overlap': 1,
+                    'max_back_overlap': 0,
+                    'tries_per_ticket': 80
+                })
+
+        elif mode == 'moderate':
+            # 适中模式：平衡热门和多样性（默认值）
+            if self.lottery_type == 'ssq':
+                self.anti_popular_config['ssq'].update({
+                    'max_score': 2,
+                    'max_run': 2,
+                    'max_same_last_digit': 2,
+                    'max_red_overlap': 2,
+                    'max_blue_dup': 1,
+                    'tries_per_ticket': 60
+                })
+            elif self.lottery_type == 'dlt':
+                self.anti_popular_config['dlt'].update({
+                    'max_score': 2,
+                    'max_run': 2,
+                    'max_same_last_digit': 2,
+                    'max_front_overlap': 2,
+                    'max_back_overlap': 1,
+                    'tries_per_ticket': 60
+                })
+
+        elif mode == 'light':
+            # 轻度模式：轻微避免热门
+            if self.lottery_type == 'ssq':
+                self.anti_popular_config['ssq'].update({
+                    'max_score': 3,
+                    'max_run': 3,
+                    'max_same_last_digit': 3,
+                    'max_red_overlap': 3,
+                    'max_blue_dup': 2,
+                    'tries_per_ticket': 40
+                })
+            elif self.lottery_type == 'dlt':
+                self.anti_popular_config['dlt'].update({
+                    'max_score': 3,
+                    'max_run': 3,
+                    'max_same_last_digit': 2,
+                    'max_front_overlap': 3,
+                    'max_back_overlap': 1,
+                    'tries_per_ticket': 40
+                })
+
+        # 应用自定义参数
+        lottery_config = self.anti_popular_config.get(self.lottery_type, {})
+        for key, value in kwargs.items():
+            if key in lottery_config:
+                lottery_config[key] = value
+
+    def get_anti_popular_config(self) -> Dict:
+        """获取去热门配置信息"""
+        return {
+            'enabled': self.anti_popular_config['enabled'],
+            'mode': self.anti_popular_config['mode'],
+            'lottery_config': self.anti_popular_config.get(self.lottery_type, {}).copy(),
+            'available_modes': ['strict', 'moderate', 'light'],
+            'description': {
+                'strict': '严格模式 - 最大程度避免热门模式，号码最独特',
+                'moderate': '适中模式 - 平衡热门规避和号码多样性',
+                'light': '轻度模式 - 轻微避免热门，保持较高灵活性'
+            }
+        }
+
+    def generate_anti_popular(self, count: int = 1) -> List[LotteryNumber]:
+        """
+        生成去热门号码
+
+        Args:
+            count: 生成数量
+
+        Returns:
+            号码列表
+
+        Examples:
+            generator = SmartNumberGenerator('ssq')
+            generator.set_anti_popular_config(enabled=True, mode='moderate')
+            numbers = generator.generate_anti_popular(10)
+        """
+        if not self.anti_popular_config['enabled']:
+            print("提示：去热门模式未启用，使用统计优选算法")
+            return self.generate_recommended(count)
+
+        if self.lottery_type == 'ssq':
+            return self._generate_anti_popular_ssq(count)
+        elif self.lottery_type == 'dlt':
+            return self._generate_anti_popular_dlt(count)
+        else:
+            return self.generate_recommended(count)
+
+    def _generate_anti_popular_ssq(self, count: int) -> List[SSQNumber]:
+        """生成去热门SSQ号码"""
+        config = self.anti_popular_config['ssq']
+        picks = []
+        blue_usage = Counter()
+
+        print(f"🎯 使用去热门模式生成 {count} 注双色球号码（{self.anti_popular_config['mode']}模式）")
+
+        for i in range(count):
+            best_candidate = None
+            best_score = float('inf')
+
+            for attempt in range(config['tries_per_ticket']):
+                # 1. 生成候选号码
+                red = sorted(random.sample(range(1, 34), 6))
+                blue = random.randint(1, 16)
+
+                # 2. 硬性规则检查
+                if PopularityDetector.check_hard_reject_ssq(red, blue, config):
+                    continue
+
+                # 3. 相关性检查
+                if not CorrelationChecker.check_ssq_correlation(red, blue, picks, config):
+                    continue
+
+                # 4. 蓝球使用次数检查
+                if not CorrelationChecker.check_blue_usage(blue, blue_usage, config):
+                    continue
+
+                # 5. 计算热门度分数
+                score = PopularityDetector.calculate_ssq_score(red, blue, config['sum_bounds'])
+
+                # 6. 如果满足阈值，直接接受
+                if score <= config['max_score']:
+                    picks.append((red, blue, score))
+                    blue_usage[blue] += 1
+                    print(f"  [{i+1}/{count}] 红球: {' '.join(f'{x:02d}' for x in red)} | 蓝球: {blue:02d} | 热门度: {score}")
+                    break
+
+                # 7. 记录最佳候选
+                if score < best_score:
+                    best_candidate = (red, blue, score)
+                    best_score = score
+            else:
+                # 达到最大尝试次数，接受最佳候选
+                if best_candidate:
+                    red, blue, score = best_candidate
+                    picks.append(best_candidate)
+                    blue_usage[blue] += 1
+                    print(f"  [{i+1}/{count}] 红球: {' '.join(f'{x:02d}' for x in red)} | 蓝球: {blue:02d} | 热门度: {score} (降级接受)")
+                else:
+                    # 极端兜底
+                    red = sorted(random.sample(range(1, 34), 6))
+                    blue = random.randint(1, 16)
+                    picks.append((red, blue, 99))
+                    blue_usage[blue] += 1
+                    print(f"  [{i+1}/{count}] 红球: {' '.join(f'{x:02d}' for x in red)} | 蓝球: {blue:02d} | 热门度: 99 (兜底)")
+
+        # 生成报告
+        report = CorrelationChecker.get_correlation_report(picks, 'ssq')
+        print(f"\n📊 生成报告：")
+        print(f"  多样性分数: {report['diversity_score']:.2f}")
+        print(f"  独立蓝球数: {report['unique_blues']}/{count}")
+        print(f"  平均红球重叠: {report.get('avg_red_overlap', 0):.2f}")
+
+        # 转换为SSQNumber对象
+        return [SSQNumber(red=red, blue=blue) for red, blue, _ in picks]
+
+    def _generate_anti_popular_dlt(self, count: int) -> List[DLTNumber]:
+        """生成去热门DLT号码"""
+        config = self.anti_popular_config['dlt']
+        picks = []
+
+        print(f"🎯 使用去热门模式生成 {count} 注大乐透号码（{self.anti_popular_config['mode']}模式）")
+
+        for i in range(count):
+            best_candidate = None
+            best_score = float('inf')
+
+            for attempt in range(config['tries_per_ticket']):
+                # 1. 生成候选号码
+                front = sorted(random.sample(range(1, 36), 5))
+                back = sorted(random.sample(range(1, 13), 2))
+
+                # 2. 硬性规则检查
+                if PopularityDetector.check_hard_reject_dlt(front, back, config):
+                    continue
+
+                # 3. 相关性检查
+                if not CorrelationChecker.check_dlt_correlation(front, back, picks, config):
+                    continue
+
+                # 4. 计算热门度分数
+                score = PopularityDetector.calculate_dlt_score(front, back)
+
+                # 5. 如果满足阈值，直接接受
+                if score <= config['max_score']:
+                    picks.append((front, back, score))
+                    print(f"  [{i+1}/{count}] 前区: {' '.join(f'{x:02d}' for x in front)} | 后区: {' '.join(f'{x:02d}' for x in back)} | 热门度: {score}")
+                    break
+
+                # 6. 记录最佳候选
+                if score < best_score:
+                    best_candidate = (front, back, score)
+                    best_score = score
+            else:
+                # 达到最大尝试次数，接受最佳候选
+                if best_candidate:
+                    front, back, score = best_candidate
+                    picks.append(best_candidate)
+                    print(f"  [{i+1}/{count}] 前区: {' '.join(f'{x:02d}' for x in front)} | 后区: {' '.join(f'{x:02d}' for x in back)} | 热门度: {score} (降级接受)")
+                else:
+                    # 极端兜底
+                    front = sorted(random.sample(range(1, 36), 5))
+                    back = sorted(random.sample(range(1, 13), 2))
+                    picks.append((front, back, 99))
+                    print(f"  [{i+1}/{count}] 前区: {' '.join(f'{x:02d}' for x in front)} | 后区: {' '.join(f'{x:02d}' for x in back)} | 热门度: 99 (兜底)")
+
+        # 生成报告
+        report = CorrelationChecker.get_correlation_report(picks, 'dlt')
+        print(f"\n📊 生成报告：")
+        print(f"  多样性分数: {report['diversity_score']:.2f}")
+        print(f"  平均前区重叠: {report.get('avg_front_overlap', 0):.2f}")
+        print(f"  平均后区重叠: {report.get('avg_back_overlap', 0):.2f}")
+
+        # 转换为DLTNumber对象
+        return [DLTNumber(front=front, back=back) for front, back, _ in picks]
+
+    def generate_hybrid(self, count: int = 1, anti_popular_ratio: float = 0.5) -> List[LotteryNumber]:
+        """
+        混合生成模式：结合统计优选和去热门
+
+        Args:
+            count: 生成总数量
+            anti_popular_ratio: 去热门号码的比例（0-1）
+
+        Returns:
+            号码列表
+
+        Examples:
+            # 50%去热门 + 50%统计优选
+            generator.set_anti_popular_config(enabled=True, mode='moderate')
+            numbers = generator.generate_hybrid(10, anti_popular_ratio=0.5)
+        """
+        if not self.anti_popular_config['enabled']:
+            print("提示：去热门模式未启用，全部使用统计优选算法")
+            return self.generate_recommended(count)
+
+        # 计算各模式生成数量
+        anti_popular_count = int(count * anti_popular_ratio)
+        smart_count = count - anti_popular_count
+
+        print(f"\n🔀 混合模式生成：")
+        print(f"  去热门号码: {anti_popular_count} 注")
+        print(f"  统计优选号码: {smart_count} 注")
+        print(f"  总计: {count} 注\n")
+
+        all_numbers = []
+
+        # 生成去热门号码
+        if anti_popular_count > 0:
+            print("=" * 60)
+            print("第一部分：去热门号码生成")
+            print("=" * 60)
+            anti_popular_numbers = self.generate_anti_popular(anti_popular_count)
+            all_numbers.extend(anti_popular_numbers)
+
+        # 生成统计优选号码
+        if smart_count > 0:
+            print("\n" + "=" * 60)
+            print("第二部分：统计优选号码生成")
+            print("=" * 60)
+            smart_numbers = self.generate_recommended(smart_count)
+            all_numbers.extend(smart_numbers)
+
+        # 打乱顺序
+        random.shuffle(all_numbers)
+
+        print("\n" + "=" * 60)
+        print("✅ 混合模式生成完成")
+        print("=" * 60)
+
+        return all_numbers

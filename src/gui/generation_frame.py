@@ -41,18 +41,23 @@ class GenerationFrame(ttk.Frame):
 
         # 生成数量
         ttk.Label(config_frame, text="生成注数:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        self.num_sets_var = tk.IntVar(value=5) # 默认生成5注
+        self.num_sets_var = tk.IntVar(value=2) # 默认生成2注
         num_sets_spinbox = ttk.Spinbox(config_frame, from_=1, to=100, textvariable=self.num_sets_var, width=5)
         num_sets_spinbox.grid(row=1, column=1, padx=5, pady=5, sticky="w")
 
-        # 生成策略 (后续添加)
+        # 生成策略
+        ttk.Label(config_frame, text="生成策略:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
         self.strategy_map = {
             "统计优选": "smart_recommend",
             "随机生成": "random",
-            "冷热号推荐": "hot_cold"
+            "冷热号推荐": "hot_cold",
+            "去热门-严格": "anti_popular_strict",
+            "去热门-适中": "anti_popular_moderate",
+            "去热门-轻度": "anti_popular_light",
+            "混合模式": "hybrid_anti_popular"
         }
         self.strategy_var = tk.StringVar(value="统计优选") # 默认统计优选
-        self.strategy_combo = ttk.Combobox(config_frame, textvariable=self.strategy_var, values=list(self.strategy_map.keys()), state="readonly")
+        self.strategy_combo = ttk.Combobox(config_frame, textvariable=self.strategy_var, values=list(self.strategy_map.keys()), state="readonly", width=15)
         self.strategy_combo.grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="w")
         
         # 生成按钮
@@ -102,6 +107,10 @@ class GenerationFrame(ttk.Frame):
 
         if strategy == "smart_recommend":
             generation_thread = threading.Thread(target=self._background_smart_generation, args=(lottery_type, num_sets), daemon=True)
+            generation_thread.start()
+        elif strategy in ["anti_popular_strict", "anti_popular_moderate", "anti_popular_light", "hybrid_anti_popular"]:
+            # 去热门策略使用线程处理（可能较慢）
+            generation_thread = threading.Thread(target=self._background_anti_popular_generation, args=(lottery_type, num_sets, strategy), daemon=True)
             generation_thread.start()
         else:
             # For other strategies, run them directly as they are faster
@@ -164,6 +173,50 @@ class GenerationFrame(ttk.Frame):
             traceback.print_exc()
 
         self.generation_queue.put((generated_sets, error_msg, lottery_type, "smart_recommend"))
+
+    def _background_anti_popular_generation(self, lottery_type, num_sets, strategy):
+        """去热门策略生成"""
+        generated_sets = []
+        error_msg = None
+        try:
+            from src.core.generators.smart_generator import SmartNumberGenerator
+
+            # 创建智能生成器
+            generator = SmartNumberGenerator(lottery_type)
+
+            # 根据策略设置模式
+            if strategy == "anti_popular_strict":
+                mode = 'strict'
+            elif strategy == "anti_popular_moderate":
+                mode = 'moderate'
+            elif strategy == "anti_popular_light":
+                mode = 'light'
+            else:  # hybrid_anti_popular
+                mode = 'moderate'
+
+            # 生成号码
+            if strategy == "hybrid_anti_popular":
+                # 混合模式：50%去热门 + 50%统计优选
+                generator.set_anti_popular_config(enabled=True, mode=mode)
+                elite_numbers = generator.generate_hybrid(num_sets, anti_popular_ratio=0.5)
+            else:
+                # 纯去热门模式
+                generator.set_anti_popular_config(enabled=True, mode=mode)
+                elite_numbers = generator.generate_anti_popular(num_sets)
+
+            # 转换格式
+            for num_obj in elite_numbers:
+                if lottery_type == 'ssq':
+                    generated_sets.append({'red': num_obj.red, 'blue': num_obj.blue})
+                elif lottery_type == 'dlt':
+                    generated_sets.append({'front': num_obj.front, 'back': num_obj.back})
+
+        except Exception as e:
+            error_msg = str(e)
+            import traceback
+            traceback.print_exc()
+
+        self.generation_queue.put((generated_sets, error_msg, lottery_type, strategy))
 
     def _check_generation_queue(self):
         try:
