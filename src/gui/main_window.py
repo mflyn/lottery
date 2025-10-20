@@ -1247,6 +1247,11 @@ class LotteryApp:
         self.generation_tab = GenerationFrame(self.notebook, self.analysis_tab.data_manager, LotteryAnalyzer())
         self.notebook.add(self.generation_tab, text="号码推荐")
 
+        # 添加号码评价标签页
+        from src.gui.frames.number_evaluation_frame import NumberEvaluationFrame
+        self.evaluation_tab = NumberEvaluationFrame(self.notebook, self.analysis_tab.data_manager)
+        self.notebook.add(self.evaluation_tab, text="号码评价")
+
         # 添加特征工程标签页
         # 需要传递 DataManager 实例
         # self.feature_tab = FeatureEngineeringFrame(self.notebook)
