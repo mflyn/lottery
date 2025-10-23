@@ -1,7 +1,24 @@
 {
-  "fetch_time": "2025-10-19 23:30:38",
-  "total_periods": 885,
+  "fetch_time": "2025-10-22 15:03:41",
+  "total_periods": 886,
   "data": [
+    {
+      "draw_num": "2025121",
+      "draw_date": "2025-10-21",
+      "red_numbers": [
+        6,
+        8,
+        10,
+        25,
+        29,
+        30
+      ],
+      "blue_number": 8,
+      "prize_pool": "2847262236",
+      "sales": "354466956",
+      "first_prize_num": "0",
+      "first_prize_amount": "0"
+    },
     {
       "draw_num": "2025120",
       "draw_date": "2025-10-19",

@@ -83,14 +83,21 @@ class SSQNumberEvaluator(BaseNumberEvaluator):
         """
         recent_data = history_data[:periods]
         
-        # 统计频率
-        red_counter = Counter()
-        blue_counter = Counter()
-        
-        for draw in recent_data:
-            red_counter.update(draw['red_numbers'])
-            blue_counter[draw['blue_number']] += 1
-        
+        # 统计频率（带缓存）
+        cache_key = self.get_cache_key('freq_counters', periods)
+        counters = self._cache.get(cache_key)
+        if counters is None:
+            red_counter = Counter()
+            blue_counter = Counter()
+            for draw in recent_data:
+                red_counter.update(draw['red_numbers'])
+                blue_counter[draw['blue_number']] += 1
+            counters = {'red': red_counter, 'blue': blue_counter}
+            self._cache[cache_key] = counters
+        else:
+            red_counter = counters['red']
+            blue_counter = counters['blue']
+
         # 计算理论频率
         red_theory = periods * 6 / 33  # 每个红球理论出现次数
         blue_theory = periods / 16     # 每个蓝球理论出现次数
@@ -142,27 +149,38 @@ class SSQNumberEvaluator(BaseNumberEvaluator):
         Returns:
             遗漏分析结果
         """
-        # 计算所有号码的遗漏期数
-        red_missing = {i: 0 for i in range(1, 34)}
-        blue_missing = {i: 0 for i in range(1, 17)}
-        
-        # 从最新一期开始，计算每个号码的遗漏期数
-        for num in range(1, 34):
-            for i, draw in enumerate(history_data):
-                if num in draw['red_numbers']:
-                    red_missing[num] = i
-                    break
-        
-        for num in range(1, 17):
-            for i, draw in enumerate(history_data):
-                if num == draw['blue_number']:
-                    blue_missing[num] = i
-                    break
-        
-        # 计算平均遗漏
-        avg_red_missing = np.mean(list(red_missing.values()))
-        avg_blue_missing = np.mean(list(blue_missing.values()))
-        
+        # 计算所有号码的遗漏期数（带缓存）
+        cache_key = 'missing_maps'
+        missing_maps = self._cache.get(cache_key)
+        if missing_maps is None:
+            red_missing = {i: 0 for i in range(1, 34)}
+            blue_missing = {i: 0 for i in range(1, 17)}
+            # 从最新一期开始，计算每个号码的遗漏期数
+            for num in range(1, 34):
+                for i, draw in enumerate(history_data):
+                    if num in draw['red_numbers']:
+                        red_missing[num] = i
+                        break
+            for num in range(1, 17):
+                for i, draw in enumerate(history_data):
+                    if num == draw['blue_number']:
+                        blue_missing[num] = i
+                        break
+            avg_red_missing = float(np.mean(list(red_missing.values())))
+            avg_blue_missing = float(np.mean(list(blue_missing.values())))
+            missing_maps = {
+                'red_missing': red_missing,
+                'blue_missing': blue_missing,
+                'avg_red_missing': round(avg_red_missing, 1),
+                'avg_blue_missing': round(avg_blue_missing, 1)
+            }
+            self._cache[cache_key] = missing_maps
+        else:
+            red_missing = missing_maps['red_missing']
+            blue_missing = missing_maps['blue_missing']
+            avg_red_missing = missing_maps['avg_red_missing']
+            avg_blue_missing = missing_maps['avg_blue_missing']
+
         # 分析待评价号码的遗漏
         red_missing_details = []
         for num in red_numbers:

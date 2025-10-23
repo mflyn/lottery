@@ -1,7 +1,45 @@
 {
-  "fetch_time": "2025-10-19 23:36:16",
-  "total_periods": 2786,
+  "fetch_time": "2025-10-22 23:07:28",
+  "total_periods": 2788,
   "data": [
+    {
+      "draw_num": "25120",
+      "draw_date": "2025-10-22",
+      "front_numbers": [
+        11,
+        13,
+        22,
+        26,
+        35
+      ],
+      "back_numbers": [
+        2,
+        8
+      ],
+      "prize_pool": "1,229,721,100.45",
+      "sales": "325,832,725",
+      "first_prize_num": "0",
+      "first_prize_amount": "0"
+    },
+    {
+      "draw_num": "25119",
+      "draw_date": "2025-10-20",
+      "front_numbers": [
+        8,
+        15,
+        27,
+        29,
+        31
+      ],
+      "back_numbers": [
+        1,
+        7
+      ],
+      "prize_pool": "1,247,363,714.98",
+      "sales": "319,880,731",
+      "first_prize_num": "0",
+      "first_prize_amount": "0"
+    },
     {
       "draw_num": "25118",
       "draw_date": "2025-10-18",
