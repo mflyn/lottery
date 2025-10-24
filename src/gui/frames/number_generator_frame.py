@@ -4,6 +4,7 @@ from src.core.strategy.number_generator import EnhancedNumberGenerator
 from src.core.generators.base_generator import RandomGenerator
 from src.core.generators.smart_generator import SmartNumberGenerator
 from src.core.data_manager import LotteryDataManager
+from src.core.models import SSQNumber
 
 class NumberGeneratorFrame(ttk.Frame):
     """号码生成器界面"""
@@ -71,7 +72,8 @@ class NumberGeneratorFrame(ttk.Frame):
             ("模式识别", "pattern"),
             ("频率分析", "frequency"),
             ("混合策略", "hybrid"),
-            ("进化算法", "evolutionary")
+            ("进化算法", "evolutionary"),
+            ("最高评分（整注）", "top_scored")
         ]
 
         # 创建显示名称到内部标识的映射

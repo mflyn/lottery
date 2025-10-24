@@ -14,17 +14,32 @@ from .base_evaluator import BaseNumberEvaluator
 class SSQNumberEvaluator(BaseNumberEvaluator):
     """双色球号码评价器"""
     
-    def __init__(self, history_file: str = 'data/ssq_history.json'):
+    def __init__(self, history_file: str = 'data/ssq_history.json',
+                 freq_blue_weight: float = 0.3,
+                 missing_blue_weight: float = 0.3,
+                 missing_curve: str = 'linear',
+                 missing_sigma_factor: float = 1.0):
         """初始化双色球评价器
-        
+
         Args:
             history_file: 历史数据文件路径
+            freq_blue_weight: 频率维度中蓝球占比（0-1），红球占比=1-该值
+            missing_blue_weight: 遗漏维度中蓝球占比（0-1），红球占比=1-该值
+            missing_curve: 遗漏得分曲线类型（'linear' 或 'gaussian'）
+            missing_sigma_factor: 高斯曲线的sigma相对平均遗漏的比例系数
         """
         super().__init__(history_file)
         self.red_range = (1, 33)  # 红球范围
         self.blue_range = (1, 16)  # 蓝球范围
         self.red_count = 6  # 红球数量
-    
+
+        # 配置参数
+        self.freq_blue_weight = float(max(0.0, min(1.0, freq_blue_weight)))
+        self.missing_blue_weight = float(max(0.0, min(1.0, missing_blue_weight)))
+        self.missing_curve = missing_curve if missing_curve in ('linear', 'gaussian') else 'linear'
+        # 防止过小
+        self.missing_sigma_factor = float(max(0.01, missing_sigma_factor))
+
     def evaluate(self, red_numbers: List[int], blue_number: int) -> Dict[str, Any]:
         """评价双色球号码
         
@@ -464,55 +479,82 @@ class SSQNumberEvaluator(BaseNumberEvaluator):
         Returns:
             得分字典
         """
-        # 1. 频率得分（0-100）
+        # 1. 频率得分（0-100），引入蓝球影响（可调权重）
         red_freqs = [detail['frequency'] for detail in freq_result['red_details']]
-        avg_red_freq = np.mean(red_freqs)
-        freq_score = min(100, (avg_red_freq / freq_result['red_theory']) * 50 + 50)
-        
-        # 2. 遗漏得分（0-100）
+        avg_red_freq = np.mean(red_freqs) if red_freqs else 0
+        red_theory = freq_result['red_theory']
+        red_freq_score = min(100, (avg_red_freq / red_theory) * 50 + 50) if red_theory > 0 else 50
+
+        blue_freq = freq_result['blue_detail']['frequency']
+        blue_theory = freq_result['blue_theory']
+        blue_freq_score = min(100, (blue_freq / blue_theory) * 50 + 50) if blue_theory > 0 else 50
+
+        wbf = self.freq_blue_weight
+        wrf = 1.0 - wbf
+        freq_score = wrf * red_freq_score + wbf * blue_freq_score
+
+        # 2. 遗漏得分（0-100），引入蓝球影响（可选曲线 + 可调权重）
         red_missings = [detail['missing'] for detail in missing_result['red_details']]
-        avg_red_missing = np.mean(red_missings)
-        missing_score = max(0, min(100, 100 - avg_red_missing * 2))
-        
-        # 3. 模式得分（0-100）
+        avg_red_missing_all = float(missing_result.get('avg_red_missing', np.mean(red_missings) if red_missings else 0))
+        if self.missing_curve == 'gaussian':
+            sigma_r = max(1e-6, avg_red_missing_all * self.missing_sigma_factor)
+            red_scores = [float(np.exp(-0.5 * (((m - avg_red_missing_all) / sigma_r) ** 2)) * 100) for m in red_missings] if red_missings else [0.0]
+            red_missing_score = float(np.mean(red_scores))
+        else:
+            avg_red_missing_sel = np.mean(red_missings) if red_missings else 0
+            red_missing_score = max(0, min(100, 100 - avg_red_missing_sel * 2))
+
+        blue_missing_value = float(missing_result['blue_detail']['missing'])
+        avg_blue_missing_all = float(missing_result.get('avg_blue_missing', 0))
+        if self.missing_curve == 'gaussian':
+            sigma_b = max(1e-6, avg_blue_missing_all * self.missing_sigma_factor)
+            blue_missing_score = float(np.exp(-0.5 * (((blue_missing_value - avg_blue_missing_all) / sigma_b) ** 2)) * 100)
+        else:
+            blue_missing_score = max(0, min(100, 100 - blue_missing_value * 2))
+
+        wbm = self.missing_blue_weight
+        wrm = 1.0 - wbm
+        missing_score = wrm * red_missing_score + wbm * blue_missing_score
+
+        # 3. 模式得分（0-100）（目前仅针对红球模式）
         pattern_score = 0
-        
+
         # 奇偶比（20分）
         if pattern_result['odd_even']['icon'] == '✅':
             pattern_score += 20
         elif pattern_result['odd_even']['icon'] == '✓':
             pattern_score += 15
-        
+
         # 大小比（20分）
         if pattern_result['big_small']['icon'] == '✅':
             pattern_score += 20
         elif pattern_result['big_small']['icon'] == '✓':
             pattern_score += 15
-        
+
         # 区间分布（20分）
         if pattern_result['zone']['icon'] == '✅':
             pattern_score += 20
         elif pattern_result['zone']['icon'] == '✓':
             pattern_score += 15
-        
+
         # 和值（20分）
         if pattern_result['sum']['icon'] == '✅':
             pattern_score += 20
         elif pattern_result['sum']['icon'] == '✓':
             pattern_score += 15
-        
+
         # AC值（20分）
         if pattern_result['ac_value']['icon'] == '✅':
             pattern_score += 20
         elif pattern_result['ac_value']['icon'] == '✓':
             pattern_score += 15
-        
-        # 4. 独特性得分（0-100）
+
+        # 4. 独特性得分（0-100）（保持以红球相似度为主）
         uniqueness_score = max(0, 100 - historical_result['max_red_match'] * 10)
-        
+
         # 5. 综合得分
         return self.calculate_composite_score(freq_score, missing_score, pattern_score, uniqueness_score)
-    
+
     def _generate_suggestions(self, freq_result: Dict, missing_result: Dict, 
                              pattern_result: Dict, historical_result: Dict) -> List[str]:
         """生成专家建议

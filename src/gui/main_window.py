@@ -1243,13 +1243,13 @@ class LotteryApp:
         self.analysis_tab = DataAnalysisFrame(self.notebook)
         self.notebook.add(self.analysis_tab, text='数据分析')
 
-        # 添加号码推荐标签页
-        self.generation_tab = GenerationFrame(self.notebook, self.analysis_tab.data_manager, LotteryAnalyzer())
-        self.notebook.add(self.generation_tab, text="号码推荐")
-
-        # 添加号码评价标签页
+        # 添加号码评价标签页（先创建，便于号码推荐读取其评分设置）
         from src.gui.frames.number_evaluation_frame import NumberEvaluationFrame
         self.evaluation_tab = NumberEvaluationFrame(self.notebook, self.analysis_tab.data_manager)
+
+        # 添加号码推荐标签页（将评价页实例传入，联动评分配置）
+        self.generation_tab = GenerationFrame(self.notebook, self.analysis_tab.data_manager, LotteryAnalyzer(), evaluation_frame=self.evaluation_tab)
+        self.notebook.add(self.generation_tab, text="号码推荐")
         self.notebook.add(self.evaluation_tab, text="号码评价")
 
         # 添加特征工程标签页

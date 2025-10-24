@@ -4,7 +4,7 @@
 从所有双色球号码组合中（在可行范围内通过剪枝保证质量）找到评分最高的5组号码，排除历史中奖号码。
 说明：
 - 评分体系使用现有 SSQNumberEvaluator，一致性完全对齐
-- 蓝球不影响总分（当前评分实现只与红球有关），脚本为每组红球选择一个“推荐蓝球”
+- 蓝球已纳入总分计算：频率与遗漏分按红:蓝=70%:30% 融合
 - 为保证可运行性，使用启发式剪枝：先选取高质量红球池，再组合并筛选模式
 - 若分数并列，将全部列出
 
@@ -79,29 +79,7 @@ def build_history_exact_set(history_data: List[Dict[str, Any]]) -> set:
     return exact
 
 
-def choose_recommended_blue(blue_counter: Dict[int, int], blue_missing: Dict[int, int],
-                            history_exact: set, reds: Tuple[int, ...]) -> int:
-    # 蓝球评分：频率标准化 60% + 反遗漏 40%
-    periods = sum(blue_counter.values())
-    blue_theory = periods / 16 if periods else 0
-    avg_missing = float(np.mean(list(blue_missing.values()))) if blue_missing else 1.0
-
-    scores = []
-    for b in range(1, 17):
-        if ((reds, b)) in history_exact:
-            # 尽量避免历史完全相同
-            continue
-        freq = blue_counter.get(b, 0)
-        freq_score = (freq / blue_theory) if blue_theory > 0 else 0
-        miss = blue_missing.get(b, 0)
-        inv_missing = max(0.0, 1.0 - (miss / (avg_missing * 1.5 if avg_missing > 0 else 1.0)))
-        s = 0.6 * freq_score + 0.4 * inv_missing
-        scores.append((s, b))
-
-    if not scores:
-        return -1
-    scores.sort(reverse=True)
-    return scores[0][1]
+# 蓝球已纳入评分，将在主循环中为每组红球遍历全部蓝球进行评分选择
 
 
 def build_red_pool(history_data: List[Dict[str, Any]], periods: int, pool_size: int) -> List[int]:
@@ -135,24 +113,21 @@ def build_red_pool(history_data: List[Dict[str, Any]], periods: int, pool_size: 
     return pool
 
 
-def find_top_ssq(top_k: int = 5, periods: int = 100, pool_size: int = 18, out_path: str = None) -> List[Dict[str, Any]]:
-    evaluator = SSQNumberEvaluator('data/ssq_history.json')
+def find_top_ssq(top_k: int = 5, periods: int = 100, pool_size: int = 18, out_path: str = None,
+                 freq_blue_weight: float = 0.3, miss_blue_weight: float = 0.3,
+                 missing_curve: str = 'linear', missing_sigma_factor: float = 1.0) -> List[Dict[str, Any]]:
+    evaluator = SSQNumberEvaluator(
+        'data/ssq_history.json',
+        freq_blue_weight=freq_blue_weight,
+        missing_blue_weight=miss_blue_weight,
+        missing_curve=missing_curve,
+        missing_sigma_factor=missing_sigma_factor,
+    )
     history = evaluator.load_history()
 
     # 历史完全匹配集合（用于排除）
     history_exact = build_history_exact_set(history)
 
-    # 预计算蓝球频率/遗漏用于推荐蓝球
-    recent = history[:periods]
-    blue_counter = Counter()
-    for d in recent:
-        blue_counter[d['blue_number']] += 1
-    blue_missing = {i: 0 for i in range(1, 17)}
-    for num in range(1, 17):
-        for i, draw in enumerate(history):
-            if num == draw['blue_number']:
-                blue_missing[num] = i
-                break
 
     # 构建高质量红球池并组合
     red_pool = build_red_pool(history, periods, pool_size)
@@ -164,46 +139,32 @@ def find_top_ssq(top_k: int = 5, periods: int = 100, pool_size: int = 18, out_pa
     for reds in itertools.combinations(red_pool, 6):
         if not passes_pattern_filters(reds):
             continue
-        # 评分（蓝球不影响总分，这里取任意蓝球占位）
-        dummy_blue = 1
-        res = evaluator.evaluate(list(reds), dummy_blue)
-        score = res['total_score']
-        # 排除历史完全匹配时需要考虑蓝球，故此处仅记录红球分数
-        candidates.append((score, tuple(sorted(reds))))
-        total_checked += 1
+        r_sorted = tuple(sorted(reds))
+        for b in range(1, 17):
+            if (r_sorted, b) in history_exact:
+                continue
+            res = evaluator.evaluate(list(r_sorted), b)
+            score = res['total_score']
+            candidates.append((score, r_sorted, b))
+            total_checked += 1
 
-    # 去重（相同红球）并按分数降序
-    best_by_red: Dict[Tuple[int, ...], float] = {}
-    for score, r in candidates:
-        if (r not in best_by_red) or (score > best_by_red[r]):
-            best_by_red[r] = score
-
-    ranked = sorted(((s, r) for r, s in best_by_red.items()), reverse=True)
+    # 全量按分数降序
+    ranked = sorted(candidates, key=lambda x: x[0], reverse=True)
 
     # 选择前 top_k（包含并列）
     results = []
     if ranked:
-        cutoff_score = None
-        count_groups = 0
-        for s, r in ranked:
-            if cutoff_score is None:
-                cutoff_score = s
-            if count_groups < top_k or np.isclose(s, cutoff_score):
-                # 为该红球选择推荐蓝球，避免历史完全一致
-                b = choose_recommended_blue(blue_counter, blue_missing, history_exact, r)
-                if b == -1:
-                    # 如果所有蓝球都会命中历史完全一致，跳过
-                    continue
-                results.append({
-                    'red_numbers': list(r),
-                    'blue_number': b,
-                    'total_score': round(float(s), 1)
-                })
-                count_groups += 1
-                if count_groups >= top_k:
-                    cutoff_score = s  # 记录边界分
-            else:
+        # 第K名的分数作为截断，包含并列
+        kth_index = min(top_k, len(ranked)) - 1
+        cutoff_score = ranked[kth_index][0]
+        for s, r, b in ranked:
+            if s < cutoff_score and not np.isclose(s, cutoff_score):
                 break
+            results.append({
+                'red_numbers': list(r),
+                'blue_number': b,
+                'total_score': round(float(s), 1)
+            })
 
     elapsed = time.time() - start
 
@@ -214,7 +175,9 @@ def find_top_ssq(top_k: int = 5, periods: int = 100, pool_size: int = 18, out_pa
         lines.append('')
         lines.append(f'- 评分时间: {time.strftime("%Y-%m-%d %H:%M:%S")}')
         lines.append(f'- 搜索设置: periods={periods}, pool_size={pool_size}')
-        lines.append(f'- 候选组合数: {total_checked}, 用时: {elapsed:.2f}s')
+        lines.append(f'- 蓝球权重: freq={freq_blue_weight:.2f}, missing={miss_blue_weight:.2f}')
+        lines.append(f'- 遗漏曲线: {missing_curve} (sigma_factor={missing_sigma_factor})')
+        lines.append(f'- 评估组合数: {total_checked}, 用时: {elapsed:.2f}s')
         lines.append('')
         if not results:
             lines.append('> 未找到符合条件的组合（可能全部命中历史完全一致）。')
@@ -239,10 +202,24 @@ def main():
     parser.add_argument('--periods', type=int, default=100, help='频率统计所用最近期数')
     parser.add_argument('--pool-size', type=int, default=18, help='红球候选池大小（越大越慢）')
     parser.add_argument('--out', type=str, default='docs/TOP_SSQ_NUMBERS.md', help='结果输出Markdown文件路径')
+    # 新增：蓝球权重与遗漏曲线
+    parser.add_argument('--freq-blue-weight', type=float, default=0.3, help='频率维度蓝球权重（0-1）')
+    parser.add_argument('--miss-blue-weight', type=float, default=0.3, help='遗漏维度蓝球权重（0-1）')
+    parser.add_argument('--missing-curve', type=str, default='linear', choices=['linear', 'gaussian'], help='遗漏得分曲线')
+    parser.add_argument('--missing-sigma-factor', type=float, default=1.0, help='高斯曲线sigma与平均遗漏的比例系数')
 
     args = parser.parse_args()
 
-    results = find_top_ssq(top_k=args.top, periods=args.periods, pool_size=args.pool_size, out_path=args.out)
+    results = find_top_ssq(
+        top_k=args.top,
+        periods=args.periods,
+        pool_size=args.pool_size,
+        out_path=args.out,
+        freq_blue_weight=args.freq_blue_weight,
+        miss_blue_weight=args.miss_blue_weight,
+        missing_curve=args.missing_curve,
+        missing_sigma_factor=args.missing_sigma_factor,
+    )
     # 控制台输出简表
     if not results:
         print('未找到结果')

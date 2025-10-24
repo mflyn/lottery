@@ -18,17 +18,17 @@ from src.core.evaluators.dlt_evaluator import DLTNumberEvaluator
 
 class NumberEvaluationFrame(ttk.Frame):
     """号码评价框架"""
-    
+
     def __init__(self, master, data_manager=None):
         """初始化号码评价框架
-        
+
         Args:
             master: 父窗口
             data_manager: 数据管理器（可选）
         """
         super().__init__(master)
         self.data_manager = data_manager
-        
+
         # 创建评价器
         try:
             self.ssq_evaluator = SSQNumberEvaluator()
@@ -37,155 +37,187 @@ class NumberEvaluationFrame(ttk.Frame):
             messagebox.showerror("初始化错误", f"评价器初始化失败: {str(e)}")
             self.ssq_evaluator = None
             self.dlt_evaluator = None
-        
+
         # 当前评价结果
         self.current_result = None
-        
+
         # 初始化UI
         self._init_ui()
-    
+
     def _init_ui(self):
         """初始化界面"""
         # 创建主容器
         main_container = ttk.Frame(self)
         main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
+
         # 1. 彩种选择
         self._create_lottery_type_selector(main_container)
-        
+
         # 2. 号码输入
         self._create_number_input_area(main_container)
-        
+
         # 3. 评价结果
         self._create_result_display_area(main_container)
-        
+
+        # 2b. 评分设置（双色球）
+        self._create_scoring_settings_area(main_container)
+
         # 4. 详细分析
         self._create_detail_analysis_area(main_container)
-        
+
         # 5. 操作按钮
         self._create_action_buttons(main_container)
-    
+
     def _create_lottery_type_selector(self, parent):
         """创建彩种选择器"""
         frame = ttk.LabelFrame(parent, text="彩种选择", padding=10)
         frame.pack(fill=tk.X, pady=(0, 10))
-        
+
         self.lottery_type_var = tk.StringVar(value='ssq')
-        
+
         ttk.Radiobutton(
-            frame, 
-            text="双色球 (6红+1蓝)", 
-            variable=self.lottery_type_var, 
+            frame,
+            text="双色球 (6红+1蓝)",
+            variable=self.lottery_type_var,
             value='ssq',
             command=self._on_lottery_type_changed
         ).pack(side=tk.LEFT, padx=20)
-        
+
         ttk.Radiobutton(
-            frame, 
-            text="大乐透 (5前+2后)", 
-            variable=self.lottery_type_var, 
+            frame,
+            text="大乐透 (5前+2后)",
+            variable=self.lottery_type_var,
             value='dlt',
             command=self._on_lottery_type_changed
         ).pack(side=tk.LEFT, padx=20)
-    
+
     def _create_number_input_area(self, parent):
         """创建号码输入区"""
         frame = ttk.LabelFrame(parent, text="号码输入", padding=10)
         frame.pack(fill=tk.X, pady=(0, 10))
-        
+
         # 双色球输入框架
         self.ssq_input_frame = ttk.Frame(frame)
-        
+
         # 红球输入
         red_frame = ttk.Frame(self.ssq_input_frame)
         red_frame.pack(fill=tk.X, pady=5)
         ttk.Label(red_frame, text="红球:", width=8).pack(side=tk.LEFT, padx=(0, 5))
         self.ssq_red_entry = ttk.Entry(red_frame, width=50)
         self.ssq_red_entry.pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Label(red_frame, text="(6个号码，空格分隔，如: 03 09 16 17 24 33)", 
+        ttk.Label(red_frame, text="(6个号码，空格分隔，如: 03 09 16 17 24 33)",
                  foreground='gray').pack(side=tk.LEFT)
-        
+
         # 蓝球输入
         blue_frame = ttk.Frame(self.ssq_input_frame)
         blue_frame.pack(fill=tk.X, pady=5)
         ttk.Label(blue_frame, text="蓝球:", width=8).pack(side=tk.LEFT, padx=(0, 5))
         self.ssq_blue_entry = ttk.Entry(blue_frame, width=10)
         self.ssq_blue_entry.pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Label(blue_frame, text="(1个号码，如: 15)", 
+        ttk.Label(blue_frame, text="(1个号码，如: 15)",
                  foreground='gray').pack(side=tk.LEFT)
-        
+
         # 大乐透输入框架
         self.dlt_input_frame = ttk.Frame(frame)
-        
+
         # 前区输入
         front_frame = ttk.Frame(self.dlt_input_frame)
         front_frame.pack(fill=tk.X, pady=5)
         ttk.Label(front_frame, text="前区:", width=8).pack(side=tk.LEFT, padx=(0, 5))
         self.dlt_front_entry = ttk.Entry(front_frame, width=50)
         self.dlt_front_entry.pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Label(front_frame, text="(5个号码，空格分隔，如: 01 05 12 23 35)", 
+        ttk.Label(front_frame, text="(5个号码，空格分隔，如: 01 05 12 23 35)",
                  foreground='gray').pack(side=tk.LEFT)
-        
+
         # 后区输入
         back_frame = ttk.Frame(self.dlt_input_frame)
         back_frame.pack(fill=tk.X, pady=5)
         ttk.Label(back_frame, text="后区:", width=8).pack(side=tk.LEFT, padx=(0, 5))
         self.dlt_back_entry = ttk.Entry(back_frame, width=20)
         self.dlt_back_entry.pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Label(back_frame, text="(2个号码，空格分隔，如: 03 11)", 
+        ttk.Label(back_frame, text="(2个号码，空格分隔，如: 03 11)",
                  foreground='gray').pack(side=tk.LEFT)
-        
+
         # 默认显示双色球输入
         self.ssq_input_frame.pack(fill=tk.X)
-        
+
         # 操作按钮
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
-        
+
         ttk.Button(btn_frame, text="清空", command=self._clear_input, width=10).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="随机生成", command=self._random_numbers, width=10).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="评价号码", command=self._evaluate_numbers, width=15).pack(side=tk.LEFT, padx=5)
-        
+
         # 状态标签
         self.status_label = ttk.Label(btn_frame, text="", foreground='blue')
         self.status_label.pack(side=tk.LEFT, padx=20)
-    
+
+    def _create_scoring_settings_area(self, parent):
+        """创建评分设置区（仅对双色球生效）"""
+        frame = ttk.LabelFrame(parent, text="评分设置（双色球）", padding=10)
+        frame.pack(fill=tk.X, pady=(0, 10))
+
+        # 变量
+        self.ssq_freq_blue_weight_var = tk.StringVar(value="0.30")
+        self.ssq_miss_blue_weight_var = tk.StringVar(value="0.30")
+        self.ssq_missing_curve_var = tk.StringVar(value="linear")
+        self.ssq_missing_sigma_var = tk.StringVar(value="1.0")
+
+        row1 = ttk.Frame(frame)
+        row1.pack(fill=tk.X, pady=2)
+        ttk.Label(row1, text="蓝球权重(频率):", width=16).pack(side=tk.LEFT)
+        ttk.Entry(row1, textvariable=self.ssq_freq_blue_weight_var, width=8).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(row1, text="蓝球权重(遗漏):", width=16).pack(side=tk.LEFT)
+        ttk.Entry(row1, textvariable=self.ssq_miss_blue_weight_var, width=8).pack(side=tk.LEFT)
+
+        row2 = ttk.Frame(frame)
+        row2.pack(fill=tk.X, pady=2)
+        ttk.Label(row2, text="遗漏曲线:", width=16).pack(side=tk.LEFT)
+        curve_cb = ttk.Combobox(row2, textvariable=self.ssq_missing_curve_var, values=["linear", "gaussian"], width=10, state="readonly")
+        curve_cb.pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(row2, text="σ系数:", width=10).pack(side=tk.LEFT)
+        ttk.Entry(row2, textvariable=self.ssq_missing_sigma_var, width=8).pack(side=tk.LEFT)
+
+        note = ttk.Label(frame, text="注：权重范围0-1；修改后点击“评价号码”生效。", foreground='gray')
+        note.pack(anchor='w', pady=(4, 0))
+
     def _create_result_display_area(self, parent):
         """创建结果显示区"""
         frame = ttk.LabelFrame(parent, text="评价结果", padding=10)
         frame.pack(fill=tk.X, pady=(0, 10))
-        
+
         # 左侧：综合得分
         left_frame = ttk.Frame(frame)
         left_frame.pack(side=tk.LEFT, padx=20)
-        
+
         ttk.Label(left_frame, text="综合得分", font=('Arial', 12, 'bold')).pack()
-        
+
         score_frame = ttk.Frame(left_frame)
         score_frame.pack(pady=10)
-        
+
         self.total_score_label = ttk.Label(
-            score_frame, 
-            text="--", 
-            font=('Arial', 48, 'bold'), 
+            score_frame,
+            text="--",
+            font=('Arial', 48, 'bold'),
             foreground='#28a745'
         )
         self.total_score_label.pack()
-        
+
         ttk.Label(score_frame, text="/100", font=('Arial', 16)).pack()
-        
+
         self.rating_label = ttk.Label(left_frame, text="", font=('Arial', 14))
         self.rating_label.pack()
-        
+
         self.stars_label = ttk.Label(left_frame, text="", font=('Arial', 20))
         self.stars_label.pack()
-        
+
         # 右侧：各维度得分
         right_frame = ttk.Frame(frame)
         right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=20)
-        
+
         ttk.Label(right_frame, text="各维度得分", font=('Arial', 12, 'bold')).pack(anchor='w', pady=(0, 10))
-        
+
         self.dimension_labels = {}
         dimensions = [
             ('频率得分', 'frequency'),
@@ -193,133 +225,133 @@ class NumberEvaluationFrame(ttk.Frame):
             ('模式得分', 'pattern'),
             ('独特性得分', 'uniqueness')
         ]
-        
+
         for dim_name, dim_key in dimensions:
             dim_frame = ttk.Frame(right_frame)
             dim_frame.pack(fill=tk.X, pady=3)
-            
+
             ttk.Label(dim_frame, text=f"{dim_name}:", width=12, font=('Arial', 10)).pack(side=tk.LEFT)
-            
+
             # 进度条
             progress = ttk.Progressbar(dim_frame, length=200, mode='determinate')
             progress.pack(side=tk.LEFT, padx=5)
-            
+
             # 分数标签
             label = ttk.Label(dim_frame, text="--", width=15, font=('Arial', 10, 'bold'))
             label.pack(side=tk.LEFT, padx=5)
-            
+
             # 图标标签
             icon_label = ttk.Label(dim_frame, text="", font=('Arial', 12))
             icon_label.pack(side=tk.LEFT)
-            
+
             self.dimension_labels[dim_key] = {
                 'progress': progress,
                 'label': label,
                 'icon': icon_label
             }
-    
+
     def _create_detail_analysis_area(self, parent):
         """创建详细分析区"""
         frame = ttk.LabelFrame(parent, text="详细分析", padding=10)
         frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-        
+
         # 创建标签页
         self.detail_notebook = ttk.Notebook(frame)
         self.detail_notebook.pack(fill=tk.BOTH, expand=True)
-        
+
         # 各个分析标签页
         self.freq_text = self._create_text_tab(self.detail_notebook, "频率分析")
         self.missing_text = self._create_text_tab(self.detail_notebook, "遗漏分析")
         self.pattern_text = self._create_text_tab(self.detail_notebook, "模式分析")
         self.historical_text = self._create_text_tab(self.detail_notebook, "历史对比")
         self.suggestion_text = self._create_text_tab(self.detail_notebook, "专家建议")
-    
+
     def _create_text_tab(self, notebook, title):
         """创建文本标签页"""
         frame = ttk.Frame(notebook)
         notebook.add(frame, text=title)
-        
+
         # 创建文本框和滚动条
         text_frame = ttk.Frame(frame)
         text_frame.pack(fill=tk.BOTH, expand=True)
-        
-        text = tk.Text(text_frame, wrap=tk.WORD, font=('Consolas', 10), 
+
+        text = tk.Text(text_frame, wrap=tk.WORD, font=('Consolas', 10),
                       padx=10, pady=10, relief=tk.FLAT, bg='#f8f9fa')
         text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
+
         scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=text.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         text.configure(yscrollcommand=scrollbar.set)
-        
+
         # 设置为只读
         text.configure(state=tk.DISABLED)
-        
+
         return text
-    
+
     def _create_action_buttons(self, parent):
         """创建操作按钮"""
         frame = ttk.Frame(parent)
         frame.pack(fill=tk.X)
-        
+
         ttk.Button(frame, text="导出报告", command=self._export_report, width=15).pack(side=tk.LEFT, padx=5)
         ttk.Button(frame, text="保存号码", command=self._save_numbers, width=15).pack(side=tk.LEFT, padx=5)
-        
+
         # 右侧提示
-        ttk.Label(frame, text="⚠️ 本评价仅基于历史统计，不代表中奖概率 | 理性购彩，量力而行", 
+        ttk.Label(frame, text="⚠️ 本评价仅基于历史统计，不代表中奖概率 | 理性购彩，量力而行",
                  foreground='gray', font=('Arial', 9)).pack(side=tk.RIGHT, padx=10)
-    
+
     def _on_lottery_type_changed(self):
         """彩种切换"""
         lottery_type = self.lottery_type_var.get()
-        
+
         if lottery_type == 'ssq':
             self.dlt_input_frame.pack_forget()
             self.ssq_input_frame.pack(fill=tk.X)
         else:
             self.ssq_input_frame.pack_forget()
             self.dlt_input_frame.pack(fill=tk.X)
-        
+
         # 清空结果
         self._clear_results()
-    
+
     def _clear_input(self):
         """清空输入"""
         lottery_type = self.lottery_type_var.get()
-        
+
         if lottery_type == 'ssq':
             self.ssq_red_entry.delete(0, tk.END)
             self.ssq_blue_entry.delete(0, tk.END)
         else:
             self.dlt_front_entry.delete(0, tk.END)
             self.dlt_back_entry.delete(0, tk.END)
-        
+
         self.status_label.config(text="")
-    
+
     def _random_numbers(self):
         """随机生成号码"""
         lottery_type = self.lottery_type_var.get()
-        
+
         if lottery_type == 'ssq':
             # 双色球：6红+1蓝
             red = sorted(random.sample(range(1, 34), 6))
             blue = random.randint(1, 16)
-            
+
             self.ssq_red_entry.delete(0, tk.END)
             self.ssq_red_entry.insert(0, ' '.join(f'{n:02d}' for n in red))
-            
+
             self.ssq_blue_entry.delete(0, tk.END)
             self.ssq_blue_entry.insert(0, f'{blue:02d}')
         else:
             # 大乐透：5前+2后
             front = sorted(random.sample(range(1, 36), 5))
             back = sorted(random.sample(range(1, 13), 2))
-            
+
             self.dlt_front_entry.delete(0, tk.END)
             self.dlt_front_entry.insert(0, ' '.join(f'{n:02d}' for n in front))
-            
+
             self.dlt_back_entry.delete(0, tk.END)
             self.dlt_back_entry.insert(0, ' '.join(f'{n:02d}' for n in back))
-        
+
         self.status_label.config(text="✓ 已生成随机号码", foreground='green')
 
     def _evaluate_numbers(self):
@@ -369,6 +401,26 @@ class NumberEvaluationFrame(ttk.Frame):
         # 检查评价器
         if self.ssq_evaluator is None:
             raise Exception("双色球评价器未初始化")
+
+        # 应用评分设置到评价器
+        try:
+            fbw = float(self.ssq_freq_blue_weight_var.get())
+            mbw = float(self.ssq_miss_blue_weight_var.get())
+            fbw = max(0.0, min(1.0, fbw))
+            mbw = max(0.0, min(1.0, mbw))
+            curve = (self.ssq_missing_curve_var.get() or 'linear').strip().lower()
+            if curve not in ('linear', 'gaussian'):
+                curve = 'linear'
+            sigma = float(self.ssq_missing_sigma_var.get())
+            sigma = max(0.01, sigma)
+
+            self.ssq_evaluator.freq_blue_weight = fbw
+            self.ssq_evaluator.missing_blue_weight = mbw
+            self.ssq_evaluator.missing_curve = curve
+            self.ssq_evaluator.missing_sigma_factor = sigma
+        except Exception:
+            # 若解析失败，沿用默认配置
+            pass
 
         # 异步评价
         self._evaluate_async('ssq', red_numbers, blue_number)
