@@ -535,21 +535,55 @@ class DataValidator:
     # ==================== 新增验证方法 ====================
     
     def _validate_data_types(self, data: pd.DataFrame, params: Dict):
-        """验证数据类型"""
+        """验证数据类型（增强版）"""
         type_errors = []
-        
+
         # 检查期号列
         if 'draw_num' in data.columns:
             if data['draw_num'].dtype not in ['object', 'string', 'int64']:
                 type_errors.append(f"期号列类型异常: {data['draw_num'].dtype}")
-        
+
         # 检查日期列
         if 'draw_date' in data.columns:
             try:
                 pd.to_datetime(data['draw_date'])
             except ValueError:
                 type_errors.append("日期列格式不正确")
-        
+
+        # 检查号码列表类型（双色球）
+        if self.lottery_type == 'ssq':
+            if 'red_numbers' in data.columns:
+                invalid_types = self._validate_number_list_type(data, 'red_numbers', 6)
+                if invalid_types:
+                    type_errors.append(f"红球号码列表类型错误: {invalid_types}条记录")
+
+            if 'blue_number' in data.columns:
+                invalid_types = self._validate_number_type(data, 'blue_number')
+                if invalid_types:
+                    type_errors.append(f"蓝球号码类型错误: {invalid_types}条记录")
+
+        # 检查号码列表类型（大乐透）
+        elif self.lottery_type == 'dlt':
+            if 'front_numbers' in data.columns:
+                invalid_types = self._validate_number_list_type(data, 'front_numbers', 5)
+                if invalid_types:
+                    type_errors.append(f"前区号码列表类型错误: {invalid_types}条记录")
+
+            if 'back_numbers' in data.columns:
+                invalid_types = self._validate_number_list_type(data, 'back_numbers', 2)
+                if invalid_types:
+                    type_errors.append(f"后区号码列表类型错误: {invalid_types}条记录")
+
+        # 检查数值字段类型
+        numeric_fields = ['prize_pool', 'sales', 'total_sales']
+        for field in numeric_fields:
+            if field in data.columns:
+                # 尝试转换为数值类型
+                try:
+                    pd.to_numeric(data[field], errors='coerce')
+                except Exception as e:
+                    type_errors.append(f"{field}列无法转换为数值类型: {str(e)}")
+
         if type_errors:
             self._add_result(
                 "data_types",
@@ -557,6 +591,59 @@ class DataValidator:
                 f"数据类型错误: {'; '.join(type_errors)}",
                 {"type_errors": type_errors}
             )
+
+    def _validate_number_list_type(self, data: pd.DataFrame, column: str, expected_count: int) -> int:
+        """验证号码列表类型
+
+        Args:
+            data: 数据框
+            column: 列名
+            expected_count: 期望的号码数量
+
+        Returns:
+            无效记录数
+        """
+        invalid_count = 0
+
+        for idx, value in data[column].items():
+            # 检查是否为列表类型
+            if not isinstance(value, (list, tuple)):
+                invalid_count += 1
+                continue
+
+            # 检查列表长度
+            if len(value) != expected_count:
+                invalid_count += 1
+                continue
+
+            # 检查列表元素是否为整数
+            try:
+                for num in value:
+                    if not isinstance(num, (int, np.integer)):
+                        invalid_count += 1
+                        break
+            except Exception:
+                invalid_count += 1
+
+        return invalid_count
+
+    def _validate_number_type(self, data: pd.DataFrame, column: str) -> int:
+        """验证单个号码类型
+
+        Args:
+            data: 数据框
+            column: 列名
+
+        Returns:
+            无效记录数
+        """
+        invalid_count = 0
+
+        for idx, value in data[column].items():
+            if not isinstance(value, (int, np.integer)):
+                invalid_count += 1
+
+        return invalid_count
     
     def _validate_data_completeness(self, data: pd.DataFrame, params: Dict):
         """验证数据完整性"""
