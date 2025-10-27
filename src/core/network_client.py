@@ -70,24 +70,26 @@ class NetworkClient:
         
         return session
     
-    def get(self, url: str, params: Optional[Dict[str, Any]] = None, 
-            headers: Optional[Dict[str, str]] = None, 
-            timeout: Optional[float] = None) -> requests.Response:
+    def get(self, url: str, params: Optional[Dict[str, Any]] = None,
+            headers: Optional[Dict[str, str]] = None,
+            timeout: Optional[float] = None,
+            stream: bool = False) -> requests.Response:
         """发送GET请求
-        
+
         Args:
             url: 请求URL
             params: 请求参数
             headers: 请求头
             timeout: 超时时间
-            
+            stream: 是否流式传输
+
         Returns:
             响应对象
-            
+
         Raises:
             NetworkError: 网络相关错误
         """
-        return self._request('GET', url, params=params, headers=headers, timeout=timeout)
+        return self._request('GET', url, params=params, headers=headers, timeout=timeout, stream=stream)
     
     def post(self, url: str, data: Optional[Dict[str, Any]] = None,
              json: Optional[Dict[str, Any]] = None,
@@ -196,37 +198,81 @@ class NetworkClient:
                       chunk_size: int = 8192,
                       progress_callback: Optional[callable] = None) -> bool:
         """下载文件
-        
+
         Args:
             url: 文件URL
             file_path: 保存路径
             chunk_size: 块大小
             progress_callback: 进度回调函数
-            
+
         Returns:
             是否下载成功
+
+        Raises:
+            TimeoutError: 下载超时
+            ConnectionError: 连接失败
+            HTTPError: HTTP错误
+            NetworkError: 其他网络错误
         """
         try:
+            self.logger.info(f"开始下载文件: {url}")
             response = self.get(url, stream=True)
             total_size = int(response.headers.get('content-length', 0))
             downloaded = 0
-            
-            with open(file_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=chunk_size):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        
-                        if progress_callback and total_size > 0:
-                            progress = downloaded / total_size
-                            progress_callback(progress)
-            
-            self.logger.info(f"文件下载成功: {file_path}")
-            return True
-            
+
+            # 确保目标目录存在
+            file_path_obj = Path(file_path)
+            file_path_obj.parent.mkdir(parents=True, exist_ok=True)
+
+            # 使用临时文件，下载完成后再重命名
+            temp_file = file_path_obj.with_suffix(file_path_obj.suffix + '.tmp')
+
+            try:
+                with open(temp_file, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=chunk_size):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+
+                            if progress_callback and total_size > 0:
+                                progress = downloaded / total_size
+                                progress_callback(progress)
+
+                # 下载完成，重命名临时文件
+                if file_path_obj.exists():
+                    file_path_obj.unlink()
+                temp_file.rename(file_path_obj)
+
+                self.logger.info(f"文件下载成功: {file_path} ({downloaded} 字节)")
+                return True
+
+            except IOError as e:
+                # 文件写入错误
+                self.logger.error(f"文件写入失败: {file_path} - {e}")
+                if temp_file.exists():
+                    temp_file.unlink()
+                raise NetworkError(f"文件写入失败: {e}") from e
+
+        except requests.exceptions.Timeout as e:
+            self.logger.error(f"下载超时: {url} - {e}")
+            raise TimeoutError(f"下载超时: {url}") from e
+
+        except requests.exceptions.ConnectionError as e:
+            self.logger.error(f"连接失败: {url} - {e}")
+            raise ConnectionError(f"连接失败: {url}") from e
+
+        except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code if e.response else None
+            self.logger.error(f"HTTP错误: {url} - 状态码: {status_code} - {e}")
+            raise HTTPError(f"HTTP错误: {url}", status_code) from e
+
+        except NetworkError:
+            # 重新抛出我们自己的网络错误
+            raise
+
         except Exception as e:
             self.logger.error(f"文件下载失败: {url} - {str(e)}")
-            return False
+            raise NetworkError(f"文件下载失败: {url} - {str(e)}") from e
     
     def close(self):
         """关闭会话"""

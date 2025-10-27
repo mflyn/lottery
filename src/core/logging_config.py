@@ -24,91 +24,128 @@ class LotteryLogger:
     
     def _setup_logging(self):
         """设置日志系统"""
-        # 获取日志配置
-        log_config = self.config_manager.get('logging', {})
-        log_level = log_config.get('level', 'INFO')
-        log_dir = log_config.get('log_dir', 'logs')
-        max_log_files = log_config.get('max_log_files', 10)
-        max_log_size_mb = log_config.get('max_log_size_mb', 10)
+        try:
+            # 获取日志配置
+            log_config = self.config_manager.get('logging', {})
+            log_level = log_config.get('level', 'INFO')
+            log_dir = log_config.get('log_dir', 'logs')
+            max_log_files = log_config.get('max_log_files', 10)
+            max_log_size_mb = log_config.get('max_log_size_mb', 10)
+
+            # 创建日志目录
+            log_path = Path(log_dir)
+            try:
+                log_path.mkdir(parents=True, exist_ok=True)
+            except PermissionError as e:
+                # 如果没有权限创建日志目录，使用用户主目录
+                print(f"警告: 无法创建日志目录 {log_path}: {e}")
+                log_path = Path.home() / '.lottery_logs'
+                print(f"使用备用日志目录: {log_path}")
+                try:
+                    log_path.mkdir(parents=True, exist_ok=True)
+                except Exception as e2:
+                    # 如果仍然失败，使用临时目录
+                    import tempfile
+                    log_path = Path(tempfile.gettempdir()) / 'lottery_logs'
+                    print(f"警告: 使用临时日志目录: {log_path}")
+                    log_path.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                # 其他错误，使用临时目录
+                print(f"错误: 创建日志目录失败: {e}")
+                import tempfile
+                log_path = Path(tempfile.gettempdir()) / 'lottery_logs'
+                print(f"使用临时日志目录: {log_path}")
+                log_path.mkdir(parents=True, exist_ok=True)
+
+            # 设置根日志级别
+            logging.getLogger().setLevel(getattr(logging, log_level.upper()))
+
+            # 创建格式化器
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+
+            detailed_formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s - %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+
+            # 控制台处理器
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(getattr(logging, log_level.upper()))
+            console_handler.setFormatter(formatter)
         
-        # 创建日志目录
-        log_path = Path(log_dir)
-        log_path.mkdir(exist_ok=True)
+            # 文件处理器 - 应用日志
+            app_log_file = log_path / 'lottery_app.log'
+            app_file_handler = logging.handlers.RotatingFileHandler(
+                app_log_file,
+                maxBytes=max_log_size_mb * 1024 * 1024,
+                backupCount=max_log_files,
+                encoding='utf-8'
+            )
+            app_file_handler.setLevel(logging.INFO)
+            app_file_handler.setFormatter(detailed_formatter)
+
+            # 错误日志文件处理器
+            error_log_file = log_path / 'lottery_error.log'
+            error_file_handler = logging.handlers.RotatingFileHandler(
+                error_log_file,
+                maxBytes=max_log_size_mb * 1024 * 1024,
+                backupCount=max_log_files,
+                encoding='utf-8'
+            )
+            error_file_handler.setLevel(logging.ERROR)
+            error_file_handler.setFormatter(detailed_formatter)
+
+            # 网络请求日志文件处理器
+            network_log_file = log_path / 'lottery_network.log'
+            network_file_handler = logging.handlers.RotatingFileHandler(
+                network_log_file,
+                maxBytes=max_log_size_mb * 1024 * 1024,
+                backupCount=max_log_files,
+                encoding='utf-8'
+            )
+            network_file_handler.setLevel(logging.DEBUG)
+            network_file_handler.setFormatter(detailed_formatter)
+
+            # 配置根日志记录器
+            root_logger = logging.getLogger()
+            root_logger.handlers.clear()  # 清除现有处理器
+            root_logger.addHandler(console_handler)
+            root_logger.addHandler(app_file_handler)
+            root_logger.addHandler(error_file_handler)
+
+            # 配置网络日志记录器
+            network_logger = logging.getLogger('src.core.network_client')
+            network_logger.addHandler(network_file_handler)
+            network_logger.propagate = False  # 不传播到根日志记录器
+
+            # 配置数据管理日志记录器
+            data_logger = logging.getLogger('src.core.data_manager')
+            data_logger.setLevel(logging.DEBUG)
         
-        # 设置根日志级别
-        logging.getLogger().setLevel(getattr(logging, log_level.upper()))
-        
-        # 创建格式化器
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        
-        detailed_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        
-        # 控制台处理器
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(getattr(logging, log_level.upper()))
-        console_handler.setFormatter(formatter)
-        
-        # 文件处理器 - 应用日志
-        app_log_file = log_path / 'lottery_app.log'
-        app_file_handler = logging.handlers.RotatingFileHandler(
-            app_log_file,
-            maxBytes=max_log_size_mb * 1024 * 1024,
-            backupCount=max_log_files,
-            encoding='utf-8'
-        )
-        app_file_handler.setLevel(logging.INFO)
-        app_file_handler.setFormatter(detailed_formatter)
-        
-        # 错误日志文件处理器
-        error_log_file = log_path / 'lottery_error.log'
-        error_file_handler = logging.handlers.RotatingFileHandler(
-            error_log_file,
-            maxBytes=max_log_size_mb * 1024 * 1024,
-            backupCount=max_log_files,
-            encoding='utf-8'
-        )
-        error_file_handler.setLevel(logging.ERROR)
-        error_file_handler.setFormatter(detailed_formatter)
-        
-        # 网络请求日志文件处理器
-        network_log_file = log_path / 'lottery_network.log'
-        network_file_handler = logging.handlers.RotatingFileHandler(
-            network_log_file,
-            maxBytes=max_log_size_mb * 1024 * 1024,
-            backupCount=max_log_files,
-            encoding='utf-8'
-        )
-        network_file_handler.setLevel(logging.DEBUG)
-        network_file_handler.setFormatter(detailed_formatter)
-        
-        # 配置根日志记录器
-        root_logger = logging.getLogger()
-        root_logger.handlers.clear()  # 清除现有处理器
-        root_logger.addHandler(console_handler)
-        root_logger.addHandler(app_file_handler)
-        root_logger.addHandler(error_file_handler)
-        
-        # 配置网络日志记录器
-        network_logger = logging.getLogger('src.core.network_client')
-        network_logger.addHandler(network_file_handler)
-        network_logger.propagate = False  # 不传播到根日志记录器
-        
-        # 配置数据管理日志记录器
-        data_logger = logging.getLogger('src.core.data_manager')
-        data_logger.setLevel(logging.DEBUG)
-        
-        # 配置第三方库日志级别
-        logging.getLogger('urllib3').setLevel(logging.WARNING)
-        logging.getLogger('requests').setLevel(logging.WARNING)
-        logging.getLogger('matplotlib').setLevel(logging.WARNING)
-        
-        self._log_startup_info()
+            # 配置第三方库日志级别
+            logging.getLogger('urllib3').setLevel(logging.WARNING)
+            logging.getLogger('requests').setLevel(logging.WARNING)
+            logging.getLogger('matplotlib').setLevel(logging.WARNING)
+
+            self._log_startup_info()
+
+        except Exception as e:
+            # 如果日志配置失败，使用基本配置
+            print(f"错误: 日志配置失败: {e}")
+            print("使用基本日志配置")
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            # 仍然尝试记录启动信息
+            try:
+                self._log_startup_info()
+            except:
+                pass
     
     def _log_startup_info(self):
         """记录启动信息"""

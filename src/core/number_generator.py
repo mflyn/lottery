@@ -96,26 +96,234 @@ class LotteryNumberGenerator:
         return numbers
 
     def _generate_by_frequency(self, history_data):
-        """基于频率生成号码"""
-        if self.lottery_type == 'dlt':
-            front = sorted(random.sample(range(self.front_min, self.front_max + 1), self.front_count))
-            back = sorted(random.sample(range(self.back_min, self.back_max + 1), self.back_count))
-            return DLTNumber(front=front, back=back)
-        else:
-            red = sorted(random.sample(range(self.red_min, self.red_max + 1), self.red_count))
-            blue = random.randint(self.blue_min, self.blue_max)
-            return SSQNumber(red=red, blue=blue)
+        """基于频率生成号码
+
+        使用频率分析结果，优先选择热号和温号
+        """
+        try:
+            from src.core.analyzers.frequency_analyzer import FrequencyAnalyzer
+
+            # 执行频率分析
+            analyzer = FrequencyAnalyzer(self.lottery_type, self.config)
+            freq_result = analyzer.analyze(history_data, periods=min(100, len(history_data)))
+
+            if 'data' not in freq_result:
+                # 如果分析失败，回退到随机生成
+                return self.generate_random()
+
+            data = freq_result['data']
+
+            if self.lottery_type == 'dlt':
+                # 大乐透：基于频率选择前区和后区
+                front = self._select_numbers_by_frequency(
+                    data.get('front_area', {}).get('frequency', {}),
+                    data.get('front_area', {}).get('classification', {}),
+                    self.front_count,
+                    (self.front_min, self.front_max)
+                )
+                back = self._select_numbers_by_frequency(
+                    data.get('back_area', {}).get('frequency', {}),
+                    data.get('back_area', {}).get('classification', {}),
+                    self.back_count,
+                    (self.back_min, self.back_max)
+                )
+                return DLTNumber(front=front, back=back)
+            else:
+                # 双色球：基于频率选择红球和蓝球
+                red = self._select_numbers_by_frequency(
+                    data.get('red_ball', {}).get('frequency', {}),
+                    data.get('red_ball', {}).get('classification', {}),
+                    self.red_count,
+                    (self.red_min, self.red_max)
+                )
+                blue = self._select_single_number_by_frequency(
+                    data.get('blue_ball', {}).get('frequency', {}),
+                    data.get('blue_ball', {}).get('classification', {}),
+                    (self.blue_min, self.blue_max)
+                )
+                return SSQNumber(red=red, blue=blue)
+
+        except Exception as e:
+            # 如果出错，回退到随机生成
+            print(f"频率生成失败: {e}")
+            return self.generate_random()
 
     def _generate_by_pattern(self, history_data):
-        """基于模式生成号码"""
-        if self.lottery_type == 'dlt':
-            front = sorted(random.sample(range(self.front_min, self.front_max + 1), self.front_count))
-            back = sorted(random.sample(range(self.back_min, self.back_max + 1), self.back_count))
-            return DLTNumber(front=front, back=back)
+        """基于模式生成号码
+
+        考虑奇偶比、连号、跨度等模式特征
+        """
+        try:
+            from src.core.analyzers.frequency_analyzer import FrequencyAnalyzer
+
+            # 执行频率分析（包含模式信息）
+            analyzer = FrequencyAnalyzer(self.lottery_type, self.config)
+            freq_result = analyzer.analyze(history_data, periods=min(100, len(history_data)))
+
+            if 'data' not in freq_result:
+                return self.generate_random()
+
+            data = freq_result['data']
+
+            if self.lottery_type == 'dlt':
+                # 大乐透：基于模式选择号码
+                front = self._select_numbers_by_pattern(
+                    data.get('front_area', {}).get('frequency', {}),
+                    data.get('front_area', {}).get('patterns', {}),
+                    self.front_count,
+                    (self.front_min, self.front_max)
+                )
+                back = self._select_numbers_by_pattern(
+                    data.get('back_area', {}).get('frequency', {}),
+                    data.get('back_area', {}).get('patterns', {}),
+                    self.back_count,
+                    (self.back_min, self.back_max)
+                )
+                return DLTNumber(front=front, back=back)
+            else:
+                # 双色球：基于模式选择号码
+                red = self._select_numbers_by_pattern(
+                    data.get('red_ball', {}).get('frequency', {}),
+                    data.get('red_ball', {}).get('patterns', {}),
+                    self.red_count,
+                    (self.red_min, self.red_max)
+                )
+                blue = self._select_single_number_by_frequency(
+                    data.get('blue_ball', {}).get('frequency', {}),
+                    data.get('blue_ball', {}).get('classification', {}),
+                    (self.blue_min, self.blue_max)
+                )
+                return SSQNumber(red=red, blue=blue)
+
+        except Exception as e:
+            print(f"模式生成失败: {e}")
+            return self.generate_random()
+
+    def _select_numbers_by_frequency(self, frequency, classification, count, number_range):
+        """基于频率选择号码
+
+        Args:
+            frequency: 频率字典
+            classification: 分类字典 (hot/cold/normal)
+            count: 需要选择的号码数量
+            number_range: 号码范围 (min, max)
+
+        Returns:
+            排序后的号码列表
+        """
+        if not frequency:
+            # 如果没有频率数据，随机选择
+            return sorted(random.sample(range(number_range[0], number_range[1] + 1), count))
+
+        # 获取热号和温号
+        hot_numbers = classification.get('hot', [])
+        normal_numbers = classification.get('normal', [])
+        cold_numbers = classification.get('cold', [])
+
+        # 策略：60% 热号，30% 温号，10% 冷号
+        hot_count = int(count * 0.6)
+        normal_count = int(count * 0.3)
+        cold_count = count - hot_count - normal_count
+
+        selected = []
+
+        # 选择热号
+        if hot_numbers and hot_count > 0:
+            selected.extend(random.sample(hot_numbers, min(hot_count, len(hot_numbers))))
+
+        # 选择温号
+        if normal_numbers and normal_count > 0:
+            selected.extend(random.sample(normal_numbers, min(normal_count, len(normal_numbers))))
+
+        # 选择冷号
+        if cold_numbers and cold_count > 0:
+            selected.extend(random.sample(cold_numbers, min(cold_count, len(cold_numbers))))
+
+        # 如果数量不够，从所有号码中随机补充
+        if len(selected) < count:
+            all_numbers = list(range(number_range[0], number_range[1] + 1))
+            remaining = [n for n in all_numbers if n not in selected]
+            selected.extend(random.sample(remaining, count - len(selected)))
+
+        return sorted(selected[:count])
+
+    def _select_single_number_by_frequency(self, frequency, classification, number_range):
+        """基于频率选择单个号码（用于蓝球）
+
+        Args:
+            frequency: 频率字典
+            classification: 分类字典
+            number_range: 号码范围
+
+        Returns:
+            选中的号码
+        """
+        if not frequency:
+            return random.randint(number_range[0], number_range[1])
+
+        # 获取热号
+        hot_numbers = classification.get('hot', [])
+        normal_numbers = classification.get('normal', [])
+
+        # 70% 概率选择热号，30% 概率选择温号
+        if hot_numbers and random.random() < 0.7:
+            return random.choice(hot_numbers)
+        elif normal_numbers:
+            return random.choice(normal_numbers)
         else:
-            red = sorted(random.sample(range(self.red_min, self.red_max + 1), self.red_count))
-            blue = random.randint(self.blue_min, self.blue_max)
-            return SSQNumber(red=red, blue=blue)
+            return random.randint(number_range[0], number_range[1])
+
+    def _select_numbers_by_pattern(self, frequency, patterns, count, number_range):
+        """基于模式选择号码
+
+        考虑奇偶比、连号等模式特征
+
+        Args:
+            frequency: 频率字典
+            patterns: 模式分析结果
+            count: 需要选择的号码数量
+            number_range: 号码范围
+
+        Returns:
+            排序后的号码列表
+        """
+        if not frequency:
+            return sorted(random.sample(range(number_range[0], number_range[1] + 1), count))
+
+        # 获取历史平均奇偶比
+        avg_odd_ratio = patterns.get('avg_odd_ratio', 0.5)
+
+        # 计算需要的奇数和偶数数量
+        odd_count = int(count * avg_odd_ratio)
+        even_count = count - odd_count
+
+        # 分离奇数和偶数
+        all_numbers = list(range(number_range[0], number_range[1] + 1))
+        odd_numbers = [n for n in all_numbers if n % 2 == 1]
+        even_numbers = [n for n in all_numbers if n % 2 == 0]
+
+        # 基于频率加权选择
+        selected = []
+
+        # 选择奇数
+        if odd_numbers:
+            odd_weights = [frequency.get(n, 1) for n in odd_numbers]
+            selected_odds = random.choices(odd_numbers, weights=odd_weights, k=min(odd_count, len(odd_numbers)))
+            selected.extend(selected_odds)
+
+        # 选择偶数
+        if even_numbers:
+            even_weights = [frequency.get(n, 1) for n in even_numbers]
+            selected_evens = random.choices(even_numbers, weights=even_weights, k=min(even_count, len(even_numbers)))
+            selected.extend(selected_evens)
+
+        # 去重并补充
+        selected = list(set(selected))
+        if len(selected) < count:
+            remaining = [n for n in all_numbers if n not in selected]
+            selected.extend(random.sample(remaining, count - len(selected)))
+
+        return sorted(selected[:count])
 
 def generate_random_numbers(lottery_type: str, num_sets: int = 1) -> List[Dict[str, Union[List[int], int]]]:
     """生成指定数量的随机彩票号码
