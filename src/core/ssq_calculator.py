@@ -2,6 +2,7 @@ from typing import List, Dict, Tuple
 from dataclasses import dataclass
 from itertools import combinations
 from src.utils.logger import Logger
+from src.core.calculators import BaseCalculator
 
 @dataclass
 class SSQBetResult:
@@ -12,9 +13,13 @@ class SSQBetResult:
     red_numbers: List[int]   # 红球号码
     blue_numbers: List[int]  # 蓝球号码
 
-class SSQCalculator:
-    """双色球计算器"""
-    
+class SSQCalculator(BaseCalculator):
+    """双色球计算器（完整实现）
+
+    提供双色球投注计算、中奖计算等功能。
+    继承自 BaseCalculator 基类。
+    """
+
     # 奖级设置
     PRIZE_LEVELS = {
         # (红球数, 蓝球数): [奖级, 基本奖金]
@@ -29,10 +34,21 @@ class SSQCalculator:
         (1, 1): [6, 5],        # 六等奖
         (0, 1): [6, 5],        # 六等奖
     }
-    
-    def __init__(self):
+
+    def __init__(self, config_manager=None):
+        """初始化双色球计算器
+
+        Args:
+            config_manager: 配置管理器实例（可选）
+        """
+        super().__init__(config_manager)
         self.logger = Logger()
-        self.price_per_bet = 2  # 每注2元
+
+        # 从配置管理器读取价格
+        if self.config:
+            self.price_per_bet = self.config.get_lottery_price('ssq', 'basic')
+        else:
+            self.price_per_bet = 2  # 默认每注2元
         
     def validate_numbers(self, numbers: List[int], color: str) -> bool:
         """验证号码是否有效

@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-彩票数据分析器
+彩票数据分析器 - 简单分析器实现
+注意：此文件保留用于向后兼容，建议使用 src/core/analyzers/ 目录下的完整实现
 """
 
 from abc import ABC, abstractmethod
@@ -10,31 +11,35 @@ from typing import List, Dict
 from collections import Counter
 import pandas as pd
 import numpy as np
-from .lottery_analyzer import LotteryAnalyzer
+from .analyzers.lottery_analyzer import LotteryAnalyzer
 
 
 class SSQAnalyzer(LotteryAnalyzer):
-    """双色球数据分析器"""
-    
+    """双色球数据分析器 - 简单实现
+
+    注意：这是一个简化版本，用于向后兼容。
+    推荐使用 src/core/ssq_analyzer.py 中的完整实现。
+    """
+
     def analyze_frequency(self, history_data: List[Dict], periods: int = 100) -> Dict:
         """分析号码出现频率"""
         recent_data = history_data[:periods]
-        
+
         # 统计红球和蓝球号码
         red_numbers = []
         blue_numbers = []
         for draw in recent_data:
             red_numbers.extend(draw['red_numbers'])
             blue_numbers.append(draw['blue_number'])
-            
+
         # 计算频率
         red_freq = Counter(red_numbers)
         blue_freq = Counter(blue_numbers)
-        
+
         # 计算理论频率
         red_theory = periods * 6 / 33   # 红球每个号码理论出现次数
         blue_theory = periods / 16      # 蓝球每个号码理论出现次数
-        
+
         return {
             'red_frequency': dict(red_freq),
             'blue_frequency': dict(blue_freq),
@@ -42,21 +47,21 @@ class SSQAnalyzer(LotteryAnalyzer):
             'blue_theory': blue_theory,
             'periods': periods
         }
-    
+
     def analyze_trends(self, history_data: List[Dict], periods: int = 30) -> Dict:
         """分析号码走势"""
         recent_data = history_data[:periods]
-        
+
         # 创建红球和蓝球矩阵
         red_matrix = np.zeros((periods, 33))
         blue_matrix = np.zeros((periods, 16))
-        
+
         # 填充矩阵
         for i, draw in enumerate(recent_data):
             for num in draw['red_numbers']:
                 red_matrix[i][num-1] = 1
             blue_matrix[i][draw['blue_number']-1] = 1
-                
+
         return {
             'red_trends': red_matrix.tolist(),
             'blue_trends': blue_matrix.tolist(),

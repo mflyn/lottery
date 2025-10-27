@@ -23,18 +23,16 @@ def test_search_params_visibility():
     
     from src.gui.generation_frame import GenerationFrame
     from src.core.data_manager import LotteryDataManager
-    from src.core.analyzer import LotteryAnalyzer
-    
+
     root = tk.Tk()
     root.title("搜索参数可见性测试")
     root.geometry("900x700")
-    
-    # 创建数据管理器和分析器
+
+    # 创建数据管理器
     data_manager = LotteryDataManager()
-    analyzer = LotteryAnalyzer()
-    
-    # 创建生成页
-    generation_frame = GenerationFrame(root, data_manager, analyzer)
+
+    # 创建生成页（analyzer 参数已废弃）
+    generation_frame = GenerationFrame(root, data_manager)
     generation_frame.pack(fill=tk.BOTH, expand=True)
     
     print("✅ GUI已创建")
@@ -96,14 +94,12 @@ def test_programmatic():
     
     from src.gui.generation_frame import GenerationFrame
     from src.core.data_manager import LotteryDataManager
-    from src.core.analyzer import LotteryAnalyzer
-    
+
     root = tk.Tk()
     root.withdraw()  # 隐藏主窗口
-    
+
     data_manager = LotteryDataManager()
-    analyzer = LotteryAnalyzer()
-    generation_frame = GenerationFrame(root, data_manager, analyzer)
+    generation_frame = GenerationFrame(root, data_manager)
     
     print("测试1：检查控件是否正确创建")
     assert hasattr(generation_frame, 'periods_label'), "❌ periods_label 未创建"

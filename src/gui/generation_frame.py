@@ -11,15 +11,22 @@ from src.core.smart_recommender import SmartRecommender
 
 if TYPE_CHECKING:
     from src.core.data_manager import LotteryDataManager
-    from src.core.analyzer import LotteryAnalyzer
     from src.gui.frames.number_evaluation_frame import NumberEvaluationFrame
 
 class GenerationFrame(ttk.Frame):
     """号码推荐功能框架"""
-    def __init__(self, master: tk.Widget, data_manager: 'LotteryDataManager', analyzer: 'LotteryAnalyzer', evaluation_frame: Optional['NumberEvaluationFrame']=None, **kwargs):
+    def __init__(self, master: tk.Widget, data_manager: 'LotteryDataManager', analyzer=None, evaluation_frame: Optional['NumberEvaluationFrame']=None, **kwargs):
+        """初始化号码推荐框架
+
+        Args:
+            master: 父窗口
+            data_manager: 数据管理器
+            analyzer: 分析器（已废弃，保留用于向后兼容）
+            evaluation_frame: 号码评价页实例，用于读取评分配置
+        """
         super().__init__(master, **kwargs)
         self.data_manager = data_manager
-        self.analyzer = analyzer
+        self.analyzer = analyzer  # 保留用于向后兼容，但不再使用
         self.evaluation_frame = evaluation_frame  # 可选：号码评价页实例，用于读取评分配置
         self.generation_queue = queue.Queue()
         self.is_generating = False
@@ -290,12 +297,56 @@ class GenerationFrame(ttk.Frame):
                 generator.set_anti_popular_config(enabled=True, mode=mode)
                 elite_numbers = generator.generate_anti_popular(num_sets)
 
+            generated_sets = self._convert_lottery_numbers_for_display(lottery_type, elite_numbers)
+
         except Exception as e:
             error_msg = str(e)
             import traceback
             traceback.print_exc()
 
         self.generation_queue.put((generated_sets, error_msg, lottery_type, strategy))
+
+
+    def _convert_lottery_numbers_for_display(self, lottery_type, numbers):
+        """将 LotteryNumber 对象列表转换为 GUI 可展示的字典结构"""
+        converted = []
+        for num in numbers or []:
+            entry = {}
+            if lottery_type == 'ssq':
+                red = list(getattr(num, 'red', []))
+                if not red and hasattr(num, 'numbers'):
+                    red = list(getattr(num, 'numbers', [])[:-1])
+                blue = getattr(num, 'blue', None)
+                if blue is None and hasattr(num, 'numbers'):
+                    seq = list(getattr(num, 'numbers', []))
+                    if seq:
+                        blue = seq[-1]
+                if red:
+                    entry['red'] = sorted(int(n) for n in red)
+                if blue is not None:
+                    entry['blue'] = int(blue)
+            elif lottery_type == 'dlt':
+                front = list(getattr(num, 'front', []))
+                back = list(getattr(num, 'back', []))
+                if (not front or not back) and hasattr(num, 'numbers'):
+                    seq = list(getattr(num, 'numbers', []))
+                    if len(seq) >= 7:
+                        front = seq[:-2]
+                        back = seq[-2:]
+                if front:
+                    entry['front'] = sorted(int(n) for n in front)
+                if back:
+                    entry['back'] = sorted(int(n) for n in back)
+            else:
+                entry['numbers'] = list(getattr(num, 'numbers', []))
+
+            score = getattr(num, 'score', None)
+            if isinstance(score, (int, float)) and score not in (0, 0.0):
+                entry['score'] = score
+
+            if entry:
+                converted.append(entry)
+        return converted
 
 
     def _get_ssq_scoring_config_from_evaluation(self):

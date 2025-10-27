@@ -17,17 +17,16 @@ def demo_feature_1_config_linking():
     from src.gui.frames.number_evaluation_frame import NumberEvaluationFrame
     from src.gui.generation_frame import GenerationFrame
     from src.core.data_manager import LotteryDataManager
-    from src.core.analyzer import LotteryAnalyzer
     import tkinter as tk
-    
+
     # 创建临时窗口
     root = tk.Tk()
     root.withdraw()
-    
+
     # 创建评价页和生成页
     data_manager = LotteryDataManager()
     evaluation_frame = NumberEvaluationFrame(root, data_manager)
-    generation_frame = GenerationFrame(root, data_manager, LotteryAnalyzer(), evaluation_frame)
+    generation_frame = GenerationFrame(root, data_manager, evaluation_frame=evaluation_frame)
     
     # 模拟在评价页设置参数
     print("\n1. 在评价页设置参数：")
@@ -66,16 +65,15 @@ def demo_feature_2_search_params():
     
     from src.gui.generation_frame import GenerationFrame
     from src.core.data_manager import LotteryDataManager
-    from src.core.analyzer import LotteryAnalyzer
     import tkinter as tk
-    
+
     # 创建临时窗口
     root = tk.Tk()
     root.withdraw()
-    
+
     # 创建生成页
     data_manager = LotteryDataManager()
-    generation_frame = GenerationFrame(root, data_manager, LotteryAnalyzer())
+    generation_frame = GenerationFrame(root, data_manager)
     
     # 检查搜索参数控件
     print("\n1. 检查搜索参数控件：")

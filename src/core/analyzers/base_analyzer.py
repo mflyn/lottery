@@ -15,33 +15,43 @@ import logging
 class BaseAnalyzer(ABC):
     """分析器基类"""
     
-    def __init__(self, lottery_type: str = 'ssq'):
+    def __init__(self, lottery_type: str = 'ssq', config_manager=None):
         """初始化分析器
-        
+
         Args:
             lottery_type: 彩票类型 ('ssq' 或 'dlt')
+            config_manager: 配置管理器实例（可选）
         """
         self.lottery_type = lottery_type
         self.logger = logging.getLogger(__name__)
-        
-        # 设置彩票相关参数
+
+        # 导入配置管理器
+        if config_manager is None:
+            from ..config_manager import ConfigManager
+            config_manager = ConfigManager()
+        self.config_manager = config_manager
+
+        # 从配置获取彩票相关参数
         if lottery_type == 'ssq':
-            self.red_columns = [f'red_{i}' for i in range(1, 7)]
+            red_count = self.config_manager.get_lottery_count('ssq', 'red')
+            self.red_columns = [f'red_{i}' for i in range(1, red_count + 1)]
             self.blue_columns = ['blue_1']  # 修正为实际的列名
-            self.red_range = (1, 33)
-            self.blue_range = (1, 16)
+            self.red_range = self.config_manager.get_lottery_range('ssq', 'red')
+            self.blue_range = self.config_manager.get_lottery_range('ssq', 'blue')
             self.config = {
-                'red_range': (1, 33),
-                'blue_range': (1, 16)
+                'red_range': self.red_range,
+                'blue_range': self.blue_range
             }
         elif lottery_type == 'dlt':
-            self.red_columns = [f'front_{i}' for i in range(1, 6)]
-            self.blue_columns = [f'back_{i}' for i in range(1, 3)]
-            self.red_range = (1, 35)
-            self.blue_range = (1, 12)
+            front_count = self.config_manager.get_lottery_count('dlt', 'front')
+            back_count = self.config_manager.get_lottery_count('dlt', 'back')
+            self.red_columns = [f'front_{i}' for i in range(1, front_count + 1)]
+            self.blue_columns = [f'back_{i}' for i in range(1, back_count + 1)]
+            self.red_range = self.config_manager.get_lottery_range('dlt', 'front')
+            self.blue_range = self.config_manager.get_lottery_range('dlt', 'back')
             self.config = {
-                'front_range': (1, 35),
-                'back_range': (1, 12)
+                'front_range': self.red_range,
+                'back_range': self.blue_range
             }
         else:
             raise ValueError(f"不支持的彩票类型: {lottery_type}")

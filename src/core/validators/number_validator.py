@@ -1,13 +1,15 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 from .base_validator import BaseValidator, ValidationRule
 from ..models import LotteryNumber
+from ..config_manager import ConfigManager
 
 class NumberValidator(BaseValidator):
     """号码验证器"""
-    
-    def __init__(self, lottery_type: str):
+
+    def __init__(self, lottery_type: str, config_manager: Optional[ConfigManager] = None):
         super().__init__()
         self.lottery_type = lottery_type
+        self.config = config_manager or ConfigManager()
         self._init_rules()
         
     def _init_rules(self):
@@ -19,15 +21,21 @@ class NumberValidator(BaseValidator):
     
     def _init_dlt_rules(self):
         """初始化大乐透验证规则"""
+        # 从配置获取参数
+        front_count = self.config.get_lottery_count('dlt', 'front')
+        back_count = self.config.get_lottery_count('dlt', 'back')
+        front_min, front_max = self.config.get_lottery_range('dlt', 'front')
+        back_min, back_max = self.config.get_lottery_range('dlt', 'back')
+
         self.rules.extend([
             ValidationRule(
                 name='front_count',
-                description='前区号码数量必须为5个',
+                description=f'前区号码数量必须为{front_count}个',
                 severity='error'
             ),
             ValidationRule(
                 name='front_range',
-                description='前区号码必须在1-35之间',
+                description=f'前区号码必须在{front_min}-{front_max}之间',
                 severity='error'
             ),
             ValidationRule(
@@ -52,12 +60,12 @@ class NumberValidator(BaseValidator):
             ),
             ValidationRule(
                 name='back_count',
-                description='后区号码数量必须为2个',
+                description=f'后区号码数量必须为{back_count}个',
                 severity='error'
             ),
             ValidationRule(
                 name='back_range',
-                description='后区号码必须在1-12之间',
+                description=f'后区号码必须在{back_min}-{back_max}之间',
                 severity='error'
             ),
             ValidationRule(
@@ -74,15 +82,21 @@ class NumberValidator(BaseValidator):
     
     def _init_ssq_rules(self):
         """初始化双色球验证规则"""
+        # 从配置获取参数
+        red_count = self.config.get_lottery_count('ssq', 'red')
+        blue_count = self.config.get_lottery_count('ssq', 'blue')
+        red_min, red_max = self.config.get_lottery_range('ssq', 'red')
+        blue_min, blue_max = self.config.get_lottery_range('ssq', 'blue')
+
         self.rules.extend([
             ValidationRule(
                 name='red_count',
-                description='红球号码数量必须为6个',
+                description=f'红球号码数量必须为{red_count}个',
                 severity='error'
             ),
             ValidationRule(
                 name='red_range',
-                description='红球号码必须在1-33之间',
+                description=f'红球号码必须在{red_min}-{red_max}之间',
                 severity='error'
             ),
             ValidationRule(
@@ -107,7 +121,7 @@ class NumberValidator(BaseValidator):
             ),
             ValidationRule(
                 name='blue_range',
-                description='蓝球号码必须在1-16之间',
+                description=f'蓝球号码必须在{blue_min}-{blue_max}之间',
                 severity='error'
             )
         ])
@@ -129,22 +143,28 @@ class NumberValidator(BaseValidator):
     
     def _validate_dlt(self, number: LotteryNumber):
         """验证大乐透号码"""
+        # 从配置获取参数
+        front_count = self.config.get_lottery_count('dlt', 'front')
+        back_count = self.config.get_lottery_count('dlt', 'back')
+        front_min, front_max = self.config.get_lottery_range('dlt', 'front')
+        back_min, back_max = self.config.get_lottery_range('dlt', 'back')
+
         # 基本验证
-        if len(number.front) != 5:
-            self.add_error('前区号码数量必须为5个')
-            
-        if not all(1 <= n <= 35 for n in number.front):
-            self.add_error('前区号码必须在1-35之间')
-            
+        if len(number.front) != front_count:
+            self.add_error(f'前区号码数量必须为{front_count}个')
+
+        if not all(front_min <= n <= front_max for n in number.front):
+            self.add_error(f'前区号码必须在{front_min}-{front_max}之间')
+
         if len(set(number.front)) != len(number.front):
             self.add_error('前区号码不能重复')
-            
-        if len(number.back) != 2:
-            self.add_error('后区号码数量必须为2个')
-            
-        if not all(1 <= n <= 12 for n in number.back):
-            self.add_error('后区号码必须在1-12之间')
-            
+
+        if len(number.back) != back_count:
+            self.add_error(f'后区号码数量必须为{back_count}个')
+
+        if not all(back_min <= n <= back_max for n in number.back):
+            self.add_error(f'后区号码必须在{back_min}-{back_max}之间')
+
         if len(set(number.back)) != len(number.back):
             self.add_error('后区号码不能重复')
         
@@ -169,18 +189,23 @@ class NumberValidator(BaseValidator):
     
     def _validate_ssq(self, number: LotteryNumber):
         """验证双色球号码"""
+        # 从配置获取参数
+        red_count = self.config.get_lottery_count('ssq', 'red')
+        red_min, red_max = self.config.get_lottery_range('ssq', 'red')
+        blue_min, blue_max = self.config.get_lottery_range('ssq', 'blue')
+
         # 基本验证
-        if len(number.red) != 6:
-            self.add_error('红球号码数量必须为6个')
-            
-        if not all(1 <= n <= 33 for n in number.red):
-            self.add_error('红球号码必须在1-33之间')
-            
+        if len(number.red) != red_count:
+            self.add_error(f'红球号码数量必须为{red_count}个')
+
+        if not all(red_min <= n <= red_max for n in number.red):
+            self.add_error(f'红球号码必须在{red_min}-{red_max}之间')
+
         if len(set(number.red)) != len(number.red):
             self.add_error('红球号码不能重复')
-            
-        if not (1 <= number.blue <= 16):
-            self.add_error('蓝球号码必须在1-16之间')
+
+        if not (blue_min <= number.blue <= blue_max):
+            self.add_error(f'蓝球号码必须在{blue_min}-{blue_max}之间')
         
         # 高级验证
         red_sum = sum(number.red)

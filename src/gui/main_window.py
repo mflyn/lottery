@@ -38,8 +38,8 @@ except Exception as e_mac:
 from src.core.ssq_calculator import SSQCalculator
 from src.core.dlt_calculator import DLTCalculator # 导入大乐透计算器
 from src.core.data_manager import LotteryDataManager # 导入数据管理器
-from src.core.analyzer import LotteryAnalyzer # LotteryAnalyzer 在这里
-from src.core.analyzers import FrequencyAnalyzer, PatternAnalyzer, DLTAnalyzer # 其他分析器在这里
+# 统一从 analyzers 模块导入分析器
+from src.core.analyzers import FrequencyAnalyzer, PatternAnalyzer, DLTAnalyzer
 from src.core.ssq_analyzer import SSQAnalyzer
 from src.gui.generation_frame import GenerationFrame # 导入新的 Frame
 from src.gui.feature_engineering_frame import FeatureEngineeringFrame # 导入特征工程 Frame
@@ -1248,7 +1248,7 @@ class LotteryApp:
         self.evaluation_tab = NumberEvaluationFrame(self.notebook, self.analysis_tab.data_manager)
 
         # 添加号码推荐标签页（将评价页实例传入，联动评分配置）
-        self.generation_tab = GenerationFrame(self.notebook, self.analysis_tab.data_manager, LotteryAnalyzer(), evaluation_frame=self.evaluation_tab)
+        self.generation_tab = GenerationFrame(self.notebook, self.analysis_tab.data_manager, evaluation_frame=self.evaluation_tab)
         self.notebook.add(self.generation_tab, text="号码推荐")
         self.notebook.add(self.evaluation_tab, text="号码评价")
 

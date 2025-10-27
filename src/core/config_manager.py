@@ -67,7 +67,8 @@ class ConfigManager:
                     "blue_range": [1, 16],
                     "red_count": 6,
                     "blue_count": 1,
-                    "basic_price": 2
+                    "basic_price": 2,
+                    "required_columns": ["draw_date", "draw_num", "red_numbers", "blue_number"]
                 },
                 "dlt": {
                     "name": "大乐透",
@@ -76,7 +77,8 @@ class ConfigManager:
                     "front_count": 5,
                     "back_count": 2,
                     "basic_price": 2,
-                    "additional_price": 1
+                    "additional_price": 1,
+                    "required_columns": ["draw_date", "draw_num", "front_numbers", "back_numbers"]
                 }
             },
             
@@ -234,7 +236,76 @@ class ConfigManager:
     def get_ui_config(self) -> Dict[str, Any]:
         """获取界面配置"""
         return self.get('ui', {})
-    
+
+    def get_lottery_range(self, lottery_type: str, zone: str) -> tuple:
+        """获取彩票号码范围
+
+        Args:
+            lottery_type: 彩票类型 ('ssq' 或 'dlt')
+            zone: 区域 ('red', 'blue', 'front', 'back')
+
+        Returns:
+            (min, max) 号码范围元组
+        """
+        config = self.get_lottery_config(lottery_type)
+        range_key = f'{zone}_range'
+        range_list = config.get(range_key, [1, 10])
+        return tuple(range_list)
+
+    def get_lottery_count(self, lottery_type: str, zone: str) -> int:
+        """获取彩票号码数量
+
+        Args:
+            lottery_type: 彩票类型 ('ssq' 或 'dlt')
+            zone: 区域 ('red', 'blue', 'front', 'back')
+
+        Returns:
+            号码数量
+        """
+        config = self.get_lottery_config(lottery_type)
+        count_key = f'{zone}_count'
+        return config.get(count_key, 1)
+
+    def get_lottery_price(self, lottery_type: str, price_type: str = 'basic') -> float:
+        """获取彩票价格
+
+        Args:
+            lottery_type: 彩票类型 ('ssq' 或 'dlt')
+            price_type: 价格类型 ('basic' 或 'additional')
+
+        Returns:
+            价格（元）
+        """
+        config = self.get_lottery_config(lottery_type)
+        if price_type == 'basic':
+            return config.get('basic_price', 2)
+        else:
+            return config.get('additional_price', 1)
+
+    def get_lottery_name(self, lottery_type: str) -> str:
+        """获取彩票名称
+
+        Args:
+            lottery_type: 彩票类型 ('ssq' 或 'dlt')
+
+        Returns:
+            彩票名称
+        """
+        config = self.get_lottery_config(lottery_type)
+        return config.get('name', lottery_type.upper())
+
+    def get_required_columns(self, lottery_type: str) -> list:
+        """获取必需的数据列
+
+        Args:
+            lottery_type: 彩票类型 ('ssq' 或 'dlt')
+
+        Returns:
+            必需列名列表
+        """
+        config = self.get_lottery_config(lottery_type)
+        return config.get('required_columns', ['draw_date', 'draw_num'])
+
     def validate_config(self) -> Dict[str, Any]:
         """验证配置的有效性
         

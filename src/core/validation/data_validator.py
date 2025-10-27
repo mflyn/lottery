@@ -303,16 +303,14 @@ class DataValidator:
     
     def _validate_required_columns(self, data: pd.DataFrame, params: Dict):
         """验证必需列存在"""
-        if self.lottery_type == 'ssq':
-            required_cols = ['draw_date', 'draw_num', 'red_numbers', 'blue_number']
-        elif self.lottery_type == 'dlt':
-            required_cols = ['draw_date', 'draw_num', 'front_numbers', 'back_numbers']
-        else:
-            required_cols = ['draw_date', 'draw_num']
-        
+        # 从配置管理器获取必需列
+        from src.core.config_manager import get_config_manager
+        config = get_config_manager()
+        required_cols = config.get_required_columns(self.lottery_type)
+
         missing_cols = [col for col in required_cols if col not in data.columns]
         if missing_cols:
-            self._add_result("required_columns", ValidationLevel.ERROR, 
+            self._add_result("required_columns", ValidationLevel.ERROR,
                            f"缺少必需列: {', '.join(missing_cols)}")
     
     def _validate_date_format(self, data: pd.DataFrame, params: Dict):

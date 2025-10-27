@@ -2,6 +2,7 @@ from typing import List, Dict, Tuple
 from dataclasses import dataclass
 from itertools import combinations
 from src.utils.logger import Logger
+from src.core.calculators import BaseCalculator
 
 @dataclass
 class DLTBetResult:
@@ -13,9 +14,13 @@ class DLTBetResult:
     back_numbers: List[int]  # 后区号码
     is_additional: bool      # 是否追加投注
 
-class DLTCalculator:
-    """大乐透计算器"""
-    
+class DLTCalculator(BaseCalculator):
+    """大乐透计算器（完整实现）
+
+    提供大乐透投注计算、中奖计算等功能。
+    继承自 BaseCalculator 基类。
+    """
+
     # 奖级设置
     PRIZE_LEVELS = {
         # (前区命中数, 后区命中数): [奖级, 基本奖金, 追加奖金]
@@ -33,11 +38,23 @@ class DLTCalculator:
         (2, 1): [9, 5, 0],               # 九等奖
         (0, 2): [9, 5, 0],               # 九等奖
     }
-    
-    def __init__(self):
+
+    def __init__(self, config_manager=None):
+        """初始化大乐透计算器
+
+        Args:
+            config_manager: 配置管理器实例（可选）
+        """
+        super().__init__(config_manager)
         self.logger = Logger()
-        self.basic_price = 2    # 基本投注每注2元
-        self.additional_price = 1  # 追加投注每注1元
+
+        # 从配置管理器读取价格
+        if self.config:
+            self.basic_price = self.config.get_lottery_price('dlt', 'basic')
+            self.additional_price = self.config.get_lottery_price('dlt', 'additional')
+        else:
+            self.basic_price = 2    # 默认基本投注每注2元
+            self.additional_price = 1  # 默认追加投注每注1元
         
     def validate_numbers(self, numbers: List[int], area: str) -> bool:
         """验证号码是否有效

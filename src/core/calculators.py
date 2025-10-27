@@ -2,30 +2,90 @@
 # -*- coding: utf-8 -*-
 
 """
-彩票计算器
+彩票计算器基类和简单实现
+
+注意：此文件包含简单的计算器实现，用于向后兼容。
+推荐使用 src/core/ssq_calculator.py 和 src/core/dlt_calculator.py 中的完整实现。
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, Any
+from dataclasses import dataclass
 import itertools
 from .models import DLTNumber, SSQNumber
 
-class LotteryCalculator(ABC):
-    """彩票计算器基类"""
-    
+
+@dataclass
+class BetResult:
+    """投注结果基类"""
+    total_bets: int          # 总注数
+    total_amount: float      # 总金额
+
+
+class BaseCalculator(ABC):
+    """彩票计算器基类
+
+    所有彩票计算器应继承此基类并实现抽象方法。
+    """
+
+    def __init__(self, config_manager=None):
+        """初始化计算器
+
+        Args:
+            config_manager: 配置管理器实例（可选）
+        """
+        self.config = config_manager
+
     @abstractmethod
-    def calculate_complex_bet(self, numbers: any) -> Dict:
-        """计算复式投注注数和金额"""
-        pass
-    
-    @abstractmethod
-    def calculate_dantuo_bet(self, dan: any, tuo: any) -> Dict:
-        """计算胆拖投注注数和金额"""
+    def calculate_complex_bet(self, *args, **kwargs) -> Any:
+        """计算复式投注
+
+        Returns:
+            投注结果（具体类型由子类定义）
+        """
         pass
 
+    @abstractmethod
+    def calculate_dantuo_bet(self, *args, **kwargs) -> Any:
+        """计算胆拖投注
+
+        Returns:
+            投注结果（具体类型由子类定义）
+        """
+        pass
+
+    @abstractmethod
+    def validate_numbers(self, *args, **kwargs) -> bool:
+        """验证号码是否有效
+
+        Returns:
+            验证结果
+        """
+        pass
+
+
+# ============================================================================
+# 以下是简单实现，用于向后兼容
+# 推荐使用 src/core/ssq_calculator.py 和 src/core/dlt_calculator.py
+# ============================================================================
+
+class LotteryCalculator(BaseCalculator):
+    """彩票计算器基类（旧版，保留用于兼容）"""
+
+    def __init__(self):
+        super().__init__()
+
+    def validate_numbers(self, *args, **kwargs) -> bool:
+        """验证号码"""
+        return True
+
 class DLTCalculator(LotteryCalculator):
-    """大乐透计算器"""
-    
+    """大乐透计算器（简单实现）
+
+    注意：这是一个简化版本，用于向后兼容。
+    推荐使用 src/core/dlt_calculator.py 中的完整实现。
+    """
+
     def calculate_complex_bet(self, numbers: DLTNumber) -> Dict:
         """计算复式投注注数和金额"""
         if not numbers.validate():
@@ -67,8 +127,12 @@ class DLTCalculator(LotteryCalculator):
         }
 
 class SSQCalculator(LotteryCalculator):
-    """双色球计算器"""
-    
+    """双色球计算器（简单实现）
+
+    注意：这是一个简化版本，用于向后兼容。
+    推荐使用 src/core/ssq_calculator.py 中的完整实现。
+    """
+
     def calculate_complex_bet(self, numbers: SSQNumber) -> Dict:
         """计算复式投注注数和金额"""
         if not numbers.validate():

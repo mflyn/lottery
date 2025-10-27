@@ -1,28 +1,46 @@
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
 import random
 import numpy as np
 from .models import DLTNumber, SSQNumber
+from .config_manager import ConfigManager
 
 class LotteryNumberGenerator:
-    def __init__(self, lottery_type='dlt'):
+    def __init__(self, lottery_type='dlt', config_manager: Optional[ConfigManager] = None):
         self.lottery_type = lottery_type
+        self.config = config_manager or ConfigManager()
         self.strategies = {
             'random': self.generate_random,
             'smart': self.generate_smart,
             'hybrid': self.generate_hybrid
         }
 
+        # 从配置获取号码范围和数量
+        if lottery_type == 'dlt':
+            front_range = self.config.get_lottery_range('dlt', 'front')
+            back_range = self.config.get_lottery_range('dlt', 'back')
+            self.front_min, self.front_max = front_range
+            self.back_min, self.back_max = back_range
+            self.front_count = self.config.get_lottery_count('dlt', 'front')
+            self.back_count = self.config.get_lottery_count('dlt', 'back')
+        else:  # ssq
+            red_range = self.config.get_lottery_range('ssq', 'red')
+            blue_range = self.config.get_lottery_range('ssq', 'blue')
+            self.red_min, self.red_max = red_range
+            self.blue_min, self.blue_max = blue_range
+            self.red_count = self.config.get_lottery_count('ssq', 'red')
+            self.blue_count = self.config.get_lottery_count('ssq', 'blue')
+
     def generate_random(self):
         """随机生成号码"""
         if self.lottery_type == 'dlt':
-            # 大乐透：前区5个号码(1-35)，后区2个号码(1-12)
-            front = sorted(random.sample(range(1, 36), 5))
-            back = sorted(random.sample(range(1, 13), 2))
+            # 大乐透：从配置读取范围和数量
+            front = sorted(random.sample(range(self.front_min, self.front_max + 1), self.front_count))
+            back = sorted(random.sample(range(self.back_min, self.back_max + 1), self.back_count))
             return DLTNumber(front, back)
         else:
-            # 双色球：红球6个号码(1-33)，蓝球1个号码(1-16)
-            red = sorted(random.sample(range(1, 34), 6))
-            blue = random.randint(1, 16)
+            # 双色球：从配置读取范围和数量
+            red = sorted(random.sample(range(self.red_min, self.red_max + 1), self.red_count))
+            blue = random.randint(self.blue_min, self.blue_max)
             return SSQNumber(red, blue)
 
     def generate_smart(self, history_data=None, pattern_data=None, frequency_data=None, weights=None):
@@ -80,23 +98,23 @@ class LotteryNumberGenerator:
     def _generate_by_frequency(self, history_data):
         """基于频率生成号码"""
         if self.lottery_type == 'dlt':
-            front = sorted(random.sample(range(1, 36), 5))  # 临时使用随机生成
-            back = sorted(random.sample(range(1, 13), 2))
+            front = sorted(random.sample(range(self.front_min, self.front_max + 1), self.front_count))
+            back = sorted(random.sample(range(self.back_min, self.back_max + 1), self.back_count))
             return DLTNumber(front=front, back=back)
         else:
-            red = sorted(random.sample(range(1, 34), 6))
-            blue = random.randint(1, 16)
+            red = sorted(random.sample(range(self.red_min, self.red_max + 1), self.red_count))
+            blue = random.randint(self.blue_min, self.blue_max)
             return SSQNumber(red=red, blue=blue)
 
     def _generate_by_pattern(self, history_data):
         """基于模式生成号码"""
         if self.lottery_type == 'dlt':
-            front = sorted(random.sample(range(1, 36), 5))  # 临时使用随机生成
-            back = sorted(random.sample(range(1, 13), 2))
+            front = sorted(random.sample(range(self.front_min, self.front_max + 1), self.front_count))
+            back = sorted(random.sample(range(self.back_min, self.back_max + 1), self.back_count))
             return DLTNumber(front=front, back=back)
         else:
-            red = sorted(random.sample(range(1, 34), 6))
-            blue = random.randint(1, 16)
+            red = sorted(random.sample(range(self.red_min, self.red_max + 1), self.red_count))
+            blue = random.randint(self.blue_min, self.blue_max)
             return SSQNumber(red=red, blue=blue)
 
 def generate_random_numbers(lottery_type: str, num_sets: int = 1) -> List[Dict[str, Union[List[int], int]]]:
