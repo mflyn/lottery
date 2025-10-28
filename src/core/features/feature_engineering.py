@@ -286,8 +286,8 @@ class FeatureEngineering:
             features = pd.DataFrame({
                 'number_frequency_ma7': df['number'].rolling(window=periods).mean(),
                 'number_frequency_mean': df['number'].mean(),
-                'number_frequency_std7': df['number'].rolling(window=periods).std(),
-                'gap_days': df['number'].diff(),
+                'number_frequency_std7': df['number'].rolling(window=periods).std().fillna(0),
+                'gap_days': df['number'].diff().fillna(0),
                 'sum_value_ma7': df['number'].rolling(window=periods).sum()
             })
             

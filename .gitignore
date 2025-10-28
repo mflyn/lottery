@@ -53,3 +53,8 @@ Thumbs.db
 # Project specific
 *_test_output.txt
 old code/
+.pytest_cache/
+.ruff_cache/
+test_model.pkl
+processed.csv
+data/

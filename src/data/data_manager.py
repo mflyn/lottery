@@ -13,6 +13,11 @@ class DataManager:
     """数据管理器"""
     def __init__(self):
         self.data = None
+        self.logger = Logger()
+        self.fetchers = {
+            'dlt': DLTFetcher(),
+            'ssq': SSQFetcher()
+        }
 
     def load_lottery_data(self, lottery_type: str, start_date: Optional[str] = None) -> pd.DataFrame:
         """加载彩票数据"""
@@ -21,6 +26,13 @@ class DataManager:
             data = pd.read_csv(filepath)
             if start_date:
                 data = data[data['date'] >= start_date]
+
+            # Convert string representations of lists to actual lists
+            if 'front_numbers' in data.columns:
+                data['front_numbers'] = data['front_numbers'].apply(eval)
+            if 'back_numbers' in data.columns:
+                data['back_numbers'] = data['back_numbers'].apply(eval)
+
             return data
         except Exception as e:
             print(f"加载数据失败: {str(e)}")
@@ -91,6 +103,38 @@ class DataManager:
         
         return data
 
+    def import_data(self, filename: str) -> pd.DataFrame:
+        """从指定路径导入数据"""
+        try:
+            filepath = f"data/{filename}"
+            data = pd.read_csv(filepath)
+            return data
+        except Exception as e:
+            print(f"导入数据失败: {str(e)}")
+            return pd.DataFrame()
+
+    def get_history_data(self, 
+                        lottery_type: str,
+                        start_date: Optional[str] = None,
+                        end_date: Optional[str] = None,
+                        limit: Optional[int] = None) -> List[Dict]:
+        """获取历史数据"""
+        fetcher = self.fetchers.get(lottery_type)
+        if not fetcher:
+            raise ValueError(f"不支持的彩票类型: {lottery_type}")
+            
+        # 默认获取最近30天数据
+        if not end_date:
+            end_date = datetime.now().strftime("%Y-%m-%d")
+        if not start_date:
+            start = datetime.now() - timedelta(days=30)
+            start_date = start.strftime("%Y-%m-%d")
+            
+        history_data = fetcher.fetch_history(start_date, end_date)
+        if limit:
+            history_data = history_data[:limit]
+        return history_data
+
 class LotteryDataManager:
     """彩票数据管理器"""
     
@@ -141,21 +185,3 @@ class LotteryDataManager:
         if not fetcher:
             raise ValueError(f"不支持的彩票类型: {lottery_type}")
         return fetcher.fetch_latest()
-    
-    def get_history_data(self, 
-                        lottery_type: str,
-                        start_date: Optional[str] = None,
-                        end_date: Optional[str] = None) -> List[Dict]:
-        """获取历史数据"""
-        fetcher = self.fetchers.get(lottery_type)
-        if not fetcher:
-            raise ValueError(f"不支持的彩票类型: {lottery_type}")
-            
-        # 默认获取最近30天数据
-        if not end_date:
-            end_date = datetime.now().strftime("%Y-%m-%d")
-        if not start_date:
-            start = datetime.now() - timedelta(days=30)
-            start_date = start.strftime("%Y-%m-%d")
-            
-        return fetcher.fetch_history(start_date, end_date)

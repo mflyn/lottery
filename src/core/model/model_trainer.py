@@ -47,6 +47,10 @@ class ModelTrainer:
     def cross_validate(self, X: pd.DataFrame, y: pd.Series,
                       cv: int = 5) -> Dict[str, float]:
         """交叉验证"""
+        if cv > len(X):
+            cv = len(X)
+        if cv > len(X):
+            cv = len(X)
         cv_scores = cross_val_score(self.model, X, y, cv=cv)
         
         return {
