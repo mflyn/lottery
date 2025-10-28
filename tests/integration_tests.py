@@ -30,8 +30,9 @@ class IntegrationTests(unittest.TestCase):
             self.assertIsNotNone(features)
             
             # 3. 模型训练和预测
+            target_series = data['back_numbers'].apply(lambda nums: nums[0] if isinstance(nums, list) and nums else None)
             model_trainer = ModelTrainer()
-            train_results = model_trainer.train(features, data['back_numbers'].str[0])
+            train_results = model_trainer.train(features, target_series)
             self.assertIn('train_mse', train_results)
             
             # 4. 模型解释
@@ -66,13 +67,15 @@ class IntegrationTests(unittest.TestCase):
         features = feature_engineering.generate_features(data)
         features.fillna(0, inplace=True)
 
+        target_series = data['back_numbers'].apply(lambda nums: nums[0] if isinstance(nums, list) and nums else None)
+
         # 2. 模型训练
         model_trainer = ModelTrainer()
-        model_trainer.train(features, data['back_numbers'].str[0])
+        model_trainer.train(features, target_series)
         self.assertIsNotNone(model_trainer.model)
         
         # 3. 模型评估
-        evaluation = model_trainer.cross_validate(features, data['back_numbers'].str[0])
+        evaluation = model_trainer.cross_validate(features, target_series)
         self.assertIsNotNone(evaluation['mean_cv_score'])
         
         # 4. 模型保存和加载
