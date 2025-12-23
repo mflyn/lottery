@@ -788,7 +788,8 @@ class DataAnalysisFrame(ttk.Frame):
         # 分析结果文本区
         self.result_text_frame = ttk.LabelFrame(analysis_display_frame, text="分析结果", padding="5")
         self.result_text_frame.pack(fill=tk.X, pady=(0, 5)) # 初始不扩展
-        self.result_text = tk.Text(self.result_text_frame, height=10, wrap=tk.WORD, state=tk.DISABLED)
+        self.result_text = tk.Text(self.result_text_frame, height=10, wrap=tk.WORD, state=tk.DISABLED,
+                                   bg='#f8f9fa', fg='#212529', insertbackground='#212529')
         self.result_text.pack(fill=tk.X, expand=True)
 
         # 图表区

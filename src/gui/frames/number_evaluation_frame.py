@@ -45,38 +45,106 @@ class NumberEvaluationFrame(ttk.Frame):
         self._init_ui()
 
     def _init_ui(self):
-        """初始化界面"""
-        # 创建主容器
-        main_container = ttk.Frame(self)
+        """初始化界面 - 带滚动条支持"""
+        # 主框架使用 pack 布局
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+
+        # 创建 Canvas 和 Scrollbar 实现整体滚动
+        self.canvas = tk.Canvas(self, highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.canvas.yview)
+
+        # 创建内部框架，所有内容放在这里
+        self.scrollable_frame = ttk.Frame(self.canvas)
+
+        # 绑定配置事件，当内部框架大小变化时更新滚动区域
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+
+        # 在 Canvas 中创建窗口来放置内部框架
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+
+        # 绑定 Canvas 大小变化事件，让内部框架宽度跟随 Canvas
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+
+        # 配置 Canvas 的滚动命令
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        # 布局 Canvas 和 Scrollbar
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 绑定鼠标滚轮事件
+        self._bind_mousewheel()
+
+        # === 以下内容放在 scrollable_frame 中 ===
+
+        # 创建主内容容器
+        main_container = ttk.Frame(self.scrollable_frame)
         main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # 创建上部固定区域容器
-        top_container = ttk.Frame(main_container)
-        top_container.pack(fill=tk.X, side=tk.TOP)
-
         # 1. 彩种选择
-        self._create_lottery_type_selector(top_container)
+        self._create_lottery_type_selector(main_container)
 
         # 2. 号码输入
-        self._create_number_input_area(top_container)
+        self._create_number_input_area(main_container)
 
         # 3. 评价结果
-        self._create_result_display_area(top_container)
+        self._create_result_display_area(main_container)
 
         # 2b. 评分设置（双色球）
-        self._create_scoring_settings_area(top_container)
+        self._create_scoring_settings_area(main_container)
 
-        # 创建下部可扩展区域容器
-        bottom_container = ttk.Frame(main_container)
-        bottom_container.pack(fill=tk.BOTH, expand=True, side=tk.TOP)
+        # 4. 详细分析（设置最小高度确保可见）
+        self._create_detail_analysis_area(main_container)
 
-        # 4. 详细分析（占据剩余空间）
-        self._create_detail_analysis_area(bottom_container)
+        # 5. 操作按钮
+        self._create_action_buttons(main_container)
 
-        # 5. 操作按钮（固定在底部）
-        button_container = ttk.Frame(main_container)
-        button_container.pack(fill=tk.X, side=tk.BOTTOM)
-        self._create_action_buttons(button_container)
+    def _on_canvas_configure(self, event):
+        """Canvas 大小变化时，调整内部框架宽度"""
+        self.canvas.itemconfig(self.canvas_window, width=event.width)
+
+    def _bind_mousewheel(self):
+        """绑定鼠标滚轮/触摸板手势事件"""
+        # 使用 bind_all 绑定到所有子组件，确保触摸板手势能被捕获
+        # 当鼠标进入此框架区域时启用滚动，离开时禁用（避免影响其他区域）
+        self.canvas.bind("<Enter>", self._on_enter)
+        self.canvas.bind("<Leave>", self._on_leave)
+
+    def _on_enter(self, event):
+        """鼠标进入时绑定滚轮事件"""
+        # macOS 触摸板双指滚动
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        # Linux 鼠标滚轮
+        self.canvas.bind_all("<Button-4>", self._on_mousewheel)
+        self.canvas.bind_all("<Button-5>", self._on_mousewheel)
+
+    def _on_leave(self, event):
+        """鼠标离开时解绑滚轮事件"""
+        self.canvas.unbind_all("<MouseWheel>")
+        self.canvas.unbind_all("<Button-4>")
+        self.canvas.unbind_all("<Button-5>")
+
+    def _on_mousewheel(self, event):
+        """处理鼠标滚轮/触摸板滚动"""
+        # 检查是否还有内容可以滚动
+        if self.canvas.yview() == (0.0, 1.0):
+            return  # 内容没有超出，不需要滚动
+
+        if event.num == 4:  # Linux 向上
+            self.canvas.yview_scroll(-1, "units")
+        elif event.num == 5:  # Linux 向下
+            self.canvas.yview_scroll(1, "units")
+        else:  # Windows/macOS
+            # macOS 触摸板的 delta 值可能较小，需要调整灵敏度
+            # delta > 0 表示向上滚动，delta < 0 表示向下滚动
+            if event.delta > 0:
+                self.canvas.yview_scroll(-1, "units")
+            elif event.delta < 0:
+                self.canvas.yview_scroll(1, "units")
 
     def _create_lottery_type_selector(self, parent):
         """创建彩种选择器"""
@@ -263,10 +331,10 @@ class NumberEvaluationFrame(ttk.Frame):
     def _create_detail_analysis_area(self, parent):
         """创建详细分析区"""
         frame = ttk.LabelFrame(parent, text="详细分析", padding=10)
-        frame.pack(fill=tk.BOTH, expand=True)
+        frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
-        # 创建标签页
-        self.detail_notebook = ttk.Notebook(frame)
+        # 创建标签页，设置最小高度为 300 像素
+        self.detail_notebook = ttk.Notebook(frame, height=300)
         self.detail_notebook.pack(fill=tk.BOTH, expand=True)
 
         # 各个分析标签页

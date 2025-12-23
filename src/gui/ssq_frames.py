@@ -188,7 +188,8 @@ class SSQComplexBetFrame(ttk.Frame):
             height=4,
             font=("微软雅黑", 10),
             wrap=tk.WORD,
-            relief=tk.FLAT
+            relief=tk.FLAT,
+            bg='#f8f9fa', fg='#212529', insertbackground='#212529'
         )
         self.result_text.pack(fill=tk.X, padx=10, pady=10)
         
@@ -430,8 +431,9 @@ class SSQDantuoBetFrame:
         # 结果显示区域
         result_frame = ttk.LabelFrame(main_frame, text="投注信息")
         result_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        self.result_text = tk.Text(result_frame, height=3, width=50)
+
+        self.result_text = tk.Text(result_frame, height=3, width=50,
+                                   bg='#f8f9fa', fg='#212529', insertbackground='#212529')
         self.result_text.pack(fill=tk.X, padx=5, pady=5)
         
     def toggle_red_dan(self, number: int):
@@ -631,14 +633,16 @@ class SSQHistoryFrame:
         red_freq_frame = ttk.Frame(analysis_frame)
         red_freq_frame.pack(fill=tk.X, padx=5, pady=5)
         ttk.Label(red_freq_frame, text="红球出现频率:").pack(side=tk.LEFT)
-        self.red_freq_text = tk.Text(red_freq_frame, height=2, width=50)
+        self.red_freq_text = tk.Text(red_freq_frame, height=2, width=50,
+                                     bg='#f8f9fa', fg='#212529', insertbackground='#212529')
         self.red_freq_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
+
         # 蓝球出现频率
         blue_freq_frame = ttk.Frame(analysis_frame)
         blue_freq_frame.pack(fill=tk.X, padx=5, pady=5)
         ttk.Label(blue_freq_frame, text="蓝球出现频率:").pack(side=tk.LEFT)
-        self.blue_freq_text = tk.Text(blue_freq_frame, height=2, width=50)
+        self.blue_freq_text = tk.Text(blue_freq_frame, height=2, width=50,
+                                      bg='#f8f9fa', fg='#212529', insertbackground='#212529')
         self.blue_freq_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
     def query_history(self, count: int = None):
@@ -728,7 +732,8 @@ class SSQWinningFrame:
         bet_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # 投注号码文本框
-        self.bet_text = tk.Text(bet_frame, height=10)
+        self.bet_text = tk.Text(bet_frame, height=10,
+                               bg='#f8f9fa', fg='#212529', insertbackground='#212529')
         self.bet_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         ttk.Label(bet_frame, text="每注号码占一行，红球用空格分隔，最后一个为蓝球").pack()
         
@@ -751,8 +756,9 @@ class SSQWinningFrame:
         # 结果显示区域
         result_frame = ttk.LabelFrame(main_frame, text="中奖结果")
         result_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        self.result_text = tk.Text(result_frame, height=5)
+
+        self.result_text = tk.Text(result_frame, height=5,
+                                   bg='#f8f9fa', fg='#212529', insertbackground='#212529')
         self.result_text.pack(fill=tk.X, padx=5, pady=5)
         
     def clear_all(self):

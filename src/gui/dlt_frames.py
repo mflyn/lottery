@@ -107,8 +107,9 @@ class DLTComplexBetFrame(ttk.Frame):
         # 结果显示区域
         result_frame = ttk.LabelFrame(main_frame, text="投注信息")
         result_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        self.result_text = tk.Text(result_frame, height=3, width=50)
+
+        self.result_text = tk.Text(result_frame, height=3, width=50,
+                                   bg='#f8f9fa', fg='#212529', insertbackground='#212529')
         self.result_text.pack(fill=tk.X, padx=5, pady=5)
         
         # 添加状态提示标签
@@ -369,8 +370,9 @@ class DLTDantuoBetFrame:
         # 结果显示区域
         result_frame = ttk.LabelFrame(main_frame, text="投注信息")
         result_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        self.result_text = tk.Text(result_frame, height=4, width=50)
+
+        self.result_text = tk.Text(result_frame, height=4, width=50,
+                                   bg='#f8f9fa', fg='#212529', insertbackground='#212529')
         self.result_text.pack(fill=tk.X, padx=5, pady=5)
         
     def toggle_front_dan(self, number: int):

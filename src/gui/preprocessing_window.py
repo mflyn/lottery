@@ -67,9 +67,10 @@ class PreprocessingWindow(tk.Toplevel):
         notebook.add(result_frame, text="预处理结果")
         
         # 结果显示区域
-        self.result_text = tk.Text(result_frame, wrap=tk.WORD, height=20)
+        self.result_text = tk.Text(result_frame, wrap=tk.WORD, height=20,
+                                   bg='#f8f9fa', fg='#212529', insertbackground='#212529')
         self.result_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
+
         # 滚动条
         scrollbar = ttk.Scrollbar(result_frame, orient=tk.VERTICAL, command=self.result_text.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)

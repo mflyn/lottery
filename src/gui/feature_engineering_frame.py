@@ -157,10 +157,11 @@ class FeatureEngineeringFrame(ttk.Frame):
         # 基本信息标签页
         self.basic_info_frame = ttk.Frame(self.info_notebook)
         self.info_notebook.add(self.basic_info_frame, text="基本信息")
-        
-        self.info_text = tk.Text(self.basic_info_frame, wrap=tk.WORD)
+
+        self.info_text = tk.Text(self.basic_info_frame, wrap=tk.WORD,
+                                bg='#f8f9fa', fg='#212529', insertbackground='#212529')
         self.info_text.pack(fill=tk.BOTH, expand=True)
-        
+
         scrollbar = ttk.Scrollbar(self.basic_info_frame, orient=tk.VERTICAL, command=self.info_text.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.info_text.configure(yscrollcommand=scrollbar.set)
