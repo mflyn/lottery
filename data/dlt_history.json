@@ -1,7 +1,463 @@
 {
-  "fetch_time": "2025-10-27 15:53:39",
-  "total_periods": 2789,
+  "fetch_time": "2025-12-20 22:37:50",
+  "total_periods": 2813,
   "data": [
+    {
+      "draw_num": "25145",
+      "draw_date": "2025-12-20",
+      "front_numbers": [
+        5,
+        7,
+        20,
+        22,
+        25
+      ],
+      "back_numbers": [
+        4,
+        5
+      ],
+      "prize_pool": 739212071.38,
+      "sales": 318998515,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25144",
+      "draw_date": "2025-12-17",
+      "front_numbers": [
+        2,
+        5,
+        13,
+        15,
+        28
+      ],
+      "back_numbers": [
+        5,
+        8
+      ],
+      "prize_pool": 818422787.52,
+      "sales": 294039927,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25143",
+      "draw_date": "2025-12-15",
+      "front_numbers": [
+        3,
+        4,
+        18,
+        24,
+        29
+      ],
+      "back_numbers": [
+        7,
+        12
+      ],
+      "prize_pool": 891182916.14,
+      "sales": 292194189,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25142",
+      "draw_date": "2025-12-13",
+      "front_numbers": [
+        9,
+        10,
+        14,
+        27,
+        29
+      ],
+      "back_numbers": [
+        2,
+        9
+      ],
+      "prize_pool": 850180600,
+      "sales": 305166365,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25141",
+      "draw_date": "2025-12-10",
+      "front_numbers": [
+        4,
+        9,
+        24,
+        28,
+        29
+      ],
+      "back_numbers": [
+        2,
+        10
+      ],
+      "prize_pool": 830232368.8,
+      "sales": 293217299,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25140",
+      "draw_date": "2025-12-08",
+      "front_numbers": [
+        4,
+        5,
+        13,
+        18,
+        34
+      ],
+      "back_numbers": [
+        2,
+        8
+      ],
+      "prize_pool": 850018674.78,
+      "sales": 294883884,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25139",
+      "draw_date": "2025-12-06",
+      "front_numbers": [
+        8,
+        18,
+        22,
+        30,
+        35
+      ],
+      "back_numbers": [
+        1,
+        4
+      ],
+      "prize_pool": 830587732.32,
+      "sales": 319213811,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25138",
+      "draw_date": "2025-12-03",
+      "front_numbers": [
+        1,
+        3,
+        19,
+        21,
+        23
+      ],
+      "back_numbers": [
+        7,
+        11
+      ],
+      "prize_pool": 795955875.03,
+      "sales": 299205645,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25137",
+      "draw_date": "2025-12-01",
+      "front_numbers": [
+        7,
+        8,
+        9,
+        11,
+        22
+      ],
+      "back_numbers": [
+        5,
+        11
+      ],
+      "prize_pool": 784972571.82,
+      "sales": 306419813,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25136",
+      "draw_date": "2025-11-29",
+      "front_numbers": [
+        7,
+        11,
+        15,
+        16,
+        23
+      ],
+      "back_numbers": [
+        9,
+        11
+      ],
+      "prize_pool": 783829598.27,
+      "sales": 332166578,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25135",
+      "draw_date": "2025-11-26",
+      "front_numbers": [
+        2,
+        10,
+        16,
+        28,
+        32
+      ],
+      "back_numbers": [
+        1,
+        7
+      ],
+      "prize_pool": 813180323.37,
+      "sales": 310594999,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25134",
+      "draw_date": "2025-11-24",
+      "front_numbers": [
+        7,
+        12,
+        18,
+        27,
+        33
+      ],
+      "back_numbers": [
+        9,
+        10
+      ],
+      "prize_pool": 793585609.45,
+      "sales": 311134788,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25133",
+      "draw_date": "2025-11-22",
+      "front_numbers": [
+        4,
+        11,
+        23,
+        27,
+        35
+      ],
+      "back_numbers": [
+        7,
+        11
+      ],
+      "prize_pool": 818773870.74,
+      "sales": 337536466,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25132",
+      "draw_date": "2025-11-19",
+      "front_numbers": [
+        1,
+        9,
+        10,
+        12,
+        19
+      ],
+      "back_numbers": [
+        6,
+        7
+      ],
+      "prize_pool": 850074477.2,
+      "sales": 313565367,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25131",
+      "draw_date": "2025-11-17",
+      "front_numbers": [
+        3,
+        8,
+        25,
+        29,
+        32
+      ],
+      "back_numbers": [
+        9,
+        12
+      ],
+      "prize_pool": 878666212.85,
+      "sales": 312224838,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25130",
+      "draw_date": "2025-11-15",
+      "front_numbers": [
+        1,
+        13,
+        16,
+        27,
+        29
+      ],
+      "back_numbers": [
+        2,
+        11
+      ],
+      "prize_pool": 855509809.27,
+      "sales": 347978820,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25129",
+      "draw_date": "2025-11-12",
+      "front_numbers": [
+        3,
+        9,
+        14,
+        28,
+        35
+      ],
+      "back_numbers": [
+        2,
+        4
+      ],
+      "prize_pool": 826944600.37,
+      "sales": 327577708,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25128",
+      "draw_date": "2025-11-10",
+      "front_numbers": [
+        3,
+        6,
+        26,
+        30,
+        33
+      ],
+      "back_numbers": [
+        11,
+        12
+      ],
+      "prize_pool": 806116343.87,
+      "sales": 335180121,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25127",
+      "draw_date": "2025-11-08",
+      "front_numbers": [
+        4,
+        5,
+        19,
+        28,
+        29
+      ],
+      "back_numbers": [
+        5,
+        8
+      ],
+      "prize_pool": 827515757.27,
+      "sales": 353038355,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25126",
+      "draw_date": "2025-11-05",
+      "front_numbers": [
+        1,
+        8,
+        18,
+        27,
+        30
+      ],
+      "back_numbers": [
+        6,
+        7
+      ],
+      "prize_pool": 1033170236.36,
+      "sales": 333017418,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25125",
+      "draw_date": "2025-11-03",
+      "front_numbers": [
+        10,
+        11,
+        13,
+        19,
+        35
+      ],
+      "back_numbers": [
+        4,
+        11
+      ],
+      "prize_pool": 1071539155.61,
+      "sales": 333554750,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25124",
+      "draw_date": "2025-11-01",
+      "front_numbers": [
+        6,
+        9,
+        14,
+        26,
+        27
+      ],
+      "back_numbers": [
+        8,
+        9
+      ],
+      "prize_pool": 1062300760.96,
+      "sales": 367907521,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25123",
+      "draw_date": "2025-10-29",
+      "front_numbers": [
+        8,
+        13,
+        24,
+        25,
+        31
+      ],
+      "back_numbers": [
+        4,
+        10
+      ],
+      "prize_pool": 1136294713.48,
+      "sales": 333755324,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "25122",
+      "draw_date": "2025-10-27",
+      "front_numbers": [
+        2,
+        3,
+        6,
+        16,
+        17
+      ],
+      "back_numbers": [
+        4,
+        5
+      ],
+      "prize_pool": 1153025367.65,
+      "sales": 332420638,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
     {
       "draw_num": "25121",
       "draw_date": "2025-10-25",

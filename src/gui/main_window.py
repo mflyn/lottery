@@ -1058,10 +1058,11 @@ class DataAnalysisFrame(ttk.Frame):
                 results = None
                 if analysis_key == 'trend':
                     if hasattr(analyzer, 'analyze_trends'):
-                        # 假设 analyze_trends 接受 DataFrame (如果报错则需修改)
-                        # 它们实际需要 List[Dict]，需要转换
-                        history_list = processed_data.to_dict('records')
-                        results = analyzer.analyze_trends(history_list) # 传递 List[Dict]
+                        history_list = self._prepare_trend_data(processed_data, lottery_type)
+                        if not history_list:
+                            messagebox.showerror("分析错误", "无法准备走势分析所需的数据。")
+                            return
+                        results = analyzer.analyze_trends(history_list)
                     else:
                          messagebox.showerror("错误", f"{type(analyzer).__name__} 没有实现 analyze_trends 方法")
                          return
@@ -1161,6 +1162,135 @@ class DataAnalysisFrame(ttk.Frame):
         except Exception as e:
             messagebox.showerror("预处理错误", f"验证号码列时出错: {str(e)}")
             return None
+    
+    def _ensure_int_list(self, value) -> List[int]:
+        """将各种格式的号码值转换为整数列表"""
+        if value is None:
+            return []
+        if hasattr(value, 'tolist') and not isinstance(value, (str, bytes)):
+            return self._ensure_int_list(value.tolist())
+        if isinstance(value, (list, tuple, set)):
+            result = []
+            for item in value:
+                if item is None:
+                    continue
+                try:
+                    if pd.isna(item):
+                        continue
+                except TypeError:
+                    pass
+                try:
+                    result.append(int(item))
+                except (TypeError, ValueError):
+                    continue
+            return result
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return []
+            if text.startswith('[') and text.endswith(']'):
+                text = text[1:-1]
+            text = text.replace('，', ',').replace('、', ',').replace(';', ',').replace('；', ',')
+            parts = [p.strip() for p in text.replace(' ', ',').split(',') if p.strip()]
+            result = []
+            for part in parts:
+                try:
+                    result.append(int(float(part)))
+                except ValueError:
+                    continue
+            return result
+        try:
+            if pd.isna(value):
+                return []
+        except TypeError:
+            pass
+        try:
+            return [int(value)]
+        except (TypeError, ValueError):
+            return []
+
+    def _prepare_trend_data(self, df: pd.DataFrame, lottery_type: str) -> List[dict]:
+        """将预处理数据转换为走势分析所需的格式"""
+        if df.empty:
+            return []
+
+        records: List[dict] = []
+
+        if lottery_type == 'ssq':
+            for _, row in df.iterrows():
+                red_list = self._ensure_int_list(row.get('red_numbers'))
+                if len(red_list) < 6:
+                    continue
+                blue_list = self._ensure_int_list(row.get('blue_numbers')) or self._ensure_int_list(row.get('blue_number'))
+                if not blue_list:
+                    continue
+
+                record = {
+                    'red': ','.join(str(num) for num in red_list),
+                    'blue': str(blue_list[0])
+                }
+
+                draw_num = row.get('draw_num')
+                if draw_num is not None:
+                    try:
+                        if pd.isna(draw_num):
+                            draw_num = None
+                    except TypeError:
+                        pass
+                if draw_num is not None:
+                    record['draw_num'] = draw_num
+
+                draw_date = row.get('draw_date')
+                if isinstance(draw_date, pd.Timestamp):
+                    record['draw_date'] = draw_date.strftime('%Y-%m-%d')
+                elif draw_date is not None:
+                    try:
+                        if pd.isna(draw_date):
+                            draw_date = None
+                    except TypeError:
+                        pass
+                    if draw_date is not None:
+                        record['draw_date'] = str(draw_date)
+
+                records.append(record)
+        else:
+            for _, row in df.iterrows():
+                front_list = self._ensure_int_list(row.get('front_numbers'))
+                back_list = self._ensure_int_list(row.get('back_numbers'))
+
+                if len(front_list) < 5 or len(back_list) < 2:
+                    continue
+
+                record = {
+                    'front_numbers': front_list,
+                    'back_numbers': back_list
+                }
+
+                draw_num = row.get('draw_num')
+                if draw_num is not None:
+                    try:
+                        if pd.isna(draw_num):
+                            draw_num = None
+                    except TypeError:
+                        pass
+                if draw_num is not None:
+                    record['draw_num'] = draw_num
+
+                draw_date = row.get('draw_date')
+                if isinstance(draw_date, pd.Timestamp):
+                    record['draw_date'] = draw_date.strftime('%Y-%m-%d')
+                elif draw_date is not None:
+                    try:
+                        if pd.isna(draw_date):
+                            draw_date = None
+                    except TypeError:
+                        pass
+                    if draw_date is not None:
+                        record['draw_date'] = str(draw_date)
+
+                records.append(record)
+
+        return records
 
     def display_text_results(self, results: dict):
         self.result_text.config(state=tk.NORMAL)

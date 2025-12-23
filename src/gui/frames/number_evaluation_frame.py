@@ -50,23 +50,33 @@ class NumberEvaluationFrame(ttk.Frame):
         main_container = ttk.Frame(self)
         main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
+        # 创建上部固定区域容器
+        top_container = ttk.Frame(main_container)
+        top_container.pack(fill=tk.X, side=tk.TOP)
+
         # 1. 彩种选择
-        self._create_lottery_type_selector(main_container)
+        self._create_lottery_type_selector(top_container)
 
         # 2. 号码输入
-        self._create_number_input_area(main_container)
+        self._create_number_input_area(top_container)
 
         # 3. 评价结果
-        self._create_result_display_area(main_container)
+        self._create_result_display_area(top_container)
 
         # 2b. 评分设置（双色球）
-        self._create_scoring_settings_area(main_container)
+        self._create_scoring_settings_area(top_container)
 
-        # 4. 详细分析
-        self._create_detail_analysis_area(main_container)
+        # 创建下部可扩展区域容器
+        bottom_container = ttk.Frame(main_container)
+        bottom_container.pack(fill=tk.BOTH, expand=True, side=tk.TOP)
 
-        # 5. 操作按钮
-        self._create_action_buttons(main_container)
+        # 4. 详细分析（占据剩余空间）
+        self._create_detail_analysis_area(bottom_container)
+
+        # 5. 操作按钮（固定在底部）
+        button_container = ttk.Frame(main_container)
+        button_container.pack(fill=tk.X, side=tk.BOTTOM)
+        self._create_action_buttons(button_container)
 
     def _create_lottery_type_selector(self, parent):
         """创建彩种选择器"""
@@ -253,7 +263,7 @@ class NumberEvaluationFrame(ttk.Frame):
     def _create_detail_analysis_area(self, parent):
         """创建详细分析区"""
         frame = ttk.LabelFrame(parent, text="详细分析", padding=10)
-        frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        frame.pack(fill=tk.BOTH, expand=True)
 
         # 创建标签页
         self.detail_notebook = ttk.Notebook(frame)
@@ -276,7 +286,9 @@ class NumberEvaluationFrame(ttk.Frame):
         text_frame.pack(fill=tk.BOTH, expand=True)
 
         text = tk.Text(text_frame, wrap=tk.WORD, font=('Consolas', 10),
-                      padx=10, pady=10, relief=tk.FLAT, bg='#f8f9fa')
+                      padx=10, pady=10, relief=tk.FLAT,
+                      bg='#f8f9fa', fg='#212529',
+                      insertbackground='#212529')
         text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=text.yview)
@@ -290,15 +302,12 @@ class NumberEvaluationFrame(ttk.Frame):
 
     def _create_action_buttons(self, parent):
         """创建操作按钮"""
-        frame = ttk.Frame(parent)
-        frame.pack(fill=tk.X)
-
-        ttk.Button(frame, text="导出报告", command=self._export_report, width=15).pack(side=tk.LEFT, padx=5)
-        ttk.Button(frame, text="保存号码", command=self._save_numbers, width=15).pack(side=tk.LEFT, padx=5)
+        ttk.Button(parent, text="导出报告", command=self._export_report, width=15).pack(side=tk.LEFT, padx=5, pady=5)
+        ttk.Button(parent, text="保存号码", command=self._save_numbers, width=15).pack(side=tk.LEFT, padx=5, pady=5)
 
         # 右侧提示
-        ttk.Label(frame, text="⚠️ 本评价仅基于历史统计，不代表中奖概率 | 理性购彩，量力而行",
-                 foreground='gray', font=('Arial', 9)).pack(side=tk.RIGHT, padx=10)
+        ttk.Label(parent, text="⚠️ 本评价仅基于历史统计，不代表中奖概率 | 理性购彩，量力而行",
+                 foreground='gray', font=('Arial', 9)).pack(side=tk.RIGHT, padx=10, pady=5)
 
     def _on_lottery_type_changed(self):
         """彩种切换"""
