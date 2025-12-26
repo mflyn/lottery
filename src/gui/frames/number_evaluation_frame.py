@@ -232,15 +232,32 @@ class NumberEvaluationFrame(ttk.Frame):
         self.status_label.pack(side=tk.LEFT, padx=20)
 
     def _create_scoring_settings_area(self, parent):
-        """创建评分设置区（仅对双色球生效）"""
-        frame = ttk.LabelFrame(parent, text="评分设置（双色球）", padding=10)
+        """创建评分设置区"""
+        frame = ttk.LabelFrame(parent, text="分析设置", padding=10)
         frame.pack(fill=tk.X, pady=(0, 10))
 
         # 变量
+        self.analysis_periods_var = tk.StringVar(value="100")
         self.ssq_freq_blue_weight_var = tk.StringVar(value="0.30")
         self.ssq_miss_blue_weight_var = tk.StringVar(value="0.30")
         self.ssq_missing_curve_var = tk.StringVar(value="linear")
         self.ssq_missing_sigma_var = tk.StringVar(value="1.0")
+
+        # 第0行：分析期数（通用设置）
+        row0 = ttk.Frame(frame)
+        row0.pack(fill=tk.X, pady=2)
+        ttk.Label(row0, text="分析期数:", width=16).pack(side=tk.LEFT)
+        periods_cb = ttk.Combobox(row0, textvariable=self.analysis_periods_var,
+                                  values=["30", "50", "100", "200", "500", "全部"],
+                                  width=10, state="readonly")
+        periods_cb.pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(row0, text="(频率分析的历史数据范围)", foreground='gray').pack(side=tk.LEFT)
+
+        # 分隔线
+        ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
+
+        # 双色球专用设置标签
+        ttk.Label(frame, text="双色球专用设置:", font=('Arial', 9, 'bold')).pack(anchor='w')
 
         row1 = ttk.Frame(frame)
         row1.pack(fill=tk.X, pady=2)
@@ -499,8 +516,21 @@ class NumberEvaluationFrame(ttk.Frame):
             # 若解析失败，沿用默认配置
             pass
 
+        # 获取分析期数
+        periods = self._get_analysis_periods()
+
         # 异步评价
-        self._evaluate_async('ssq', red_numbers, blue_number)
+        self._evaluate_async('ssq', red_numbers, blue_number, periods=periods)
+
+    def _get_analysis_periods(self):
+        """获取分析期数设置"""
+        periods_str = self.analysis_periods_var.get()
+        if periods_str == "全部":
+            return None  # None 表示使用全部数据
+        try:
+            return int(periods_str)
+        except ValueError:
+            return 100  # 默认100期
 
     def _evaluate_dlt(self):
         """评价大乐透号码"""
@@ -541,10 +571,13 @@ class NumberEvaluationFrame(ttk.Frame):
         if self.dlt_evaluator is None:
             raise Exception("大乐透评价器未初始化")
 
-        # 异步评价
-        self._evaluate_async('dlt', front_numbers, back_numbers)
+        # 获取分析期数
+        periods = self._get_analysis_periods()
 
-    def _evaluate_async(self, lottery_type, *numbers):
+        # 异步评价
+        self._evaluate_async('dlt', front_numbers, back_numbers, periods=periods)
+
+    def _evaluate_async(self, lottery_type, *numbers, periods=100):
         """异步评价号码"""
         # 显示进度
         self.status_label.config(text="⏳ 正在评价中...", foreground='blue')
@@ -559,9 +592,9 @@ class NumberEvaluationFrame(ttk.Frame):
             try:
                 # 调用评价器
                 if lottery_type == 'ssq':
-                    result = self.ssq_evaluator.evaluate(*numbers)
+                    result = self.ssq_evaluator.evaluate(*numbers, periods=periods)
                 else:
-                    result = self.dlt_evaluator.evaluate(*numbers)
+                    result = self.dlt_evaluator.evaluate(*numbers, periods=periods)
 
                 # 保存结果
                 self.current_result = {

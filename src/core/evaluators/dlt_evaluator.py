@@ -26,37 +26,44 @@ class DLTNumberEvaluator(BaseNumberEvaluator):
         self.front_count = 5  # 前区数量
         self.back_count = 2   # 后区数量
     
-    def evaluate(self, front_numbers: List[int], back_numbers: List[int]) -> Dict[str, Any]:
+    def evaluate(self, front_numbers: List[int], back_numbers: List[int], periods: int = None) -> Dict[str, Any]:
         """评价大乐透号码
-        
+
         Args:
             front_numbers: 前区号码列表（5个）
             back_numbers: 后区号码列表（2个）
-            
+            periods: 分析期数（None表示使用全部数据）
+
         Returns:
             评价结果字典
         """
         # 加载历史数据
         history_data = self.load_history()
-        
+
+        # 如果未指定期数，使用全部数据；否则使用指定期数
+        if periods is None:
+            periods = len(history_data)
+        else:
+            periods = min(periods, len(history_data))
+
         # 1. 频率分析
-        freq_result = self._analyze_frequency(front_numbers, back_numbers, history_data)
-        
+        freq_result = self._analyze_frequency(front_numbers, back_numbers, history_data, periods)
+
         # 2. 遗漏分析
         missing_result = self._analyze_missing(front_numbers, back_numbers, history_data)
-        
+
         # 3. 模式分析
         pattern_result = self._analyze_patterns(front_numbers, back_numbers)
-        
+
         # 4. 历史对比
         historical_result = self._check_historical(front_numbers, back_numbers, history_data)
-        
+
         # 5. 计算得分
         scores = self._calculate_scores(freq_result, missing_result, pattern_result, historical_result)
-        
+
         # 6. 生成建议
         suggestions = self._generate_suggestions(freq_result, missing_result, pattern_result, historical_result)
-        
+
         return {
             'frequency': freq_result,
             'missing': missing_result,

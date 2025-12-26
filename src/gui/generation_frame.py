@@ -467,13 +467,13 @@ class GenerationFrame(ttk.Frame):
                     if lottery_type == 'ssq':
                         red_display = sorted([int(n) for n in nums['red']])
                         blue_display = int(nums['blue'])
-                        formatted_nums = f"红球: {red_display} | 蓝球: {blue_display}"
+                        formatted_nums = f"红球: {' '.join(f'{n:02d}' for n in red_display)} | 蓝球: {blue_display:02d}"
                         if isinstance(nums, dict) and 'score' in nums and nums['score'] is not None:
                             formatted_nums += f" | 评分: {nums['score']:.1f}"
                     elif lottery_type == 'dlt':
                         front_display = sorted([int(n) for n in nums['front']])
                         back_display = sorted([int(n) for n in nums['back']])
-                        formatted_nums = f"前区: {front_display} | 后区: {back_display}"
+                        formatted_nums = f"前区: {' '.join(f'{n:02d}' for n in front_display)} | 后区: {' '.join(f'{n:02d}' for n in back_display)}"
                     else:
                         formatted_nums = str(nums)
                     display_text += f"第 {i+1} 注: {formatted_nums}\n"

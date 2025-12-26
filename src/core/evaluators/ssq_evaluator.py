@@ -40,37 +40,44 @@ class SSQNumberEvaluator(BaseNumberEvaluator):
         # 防止过小
         self.missing_sigma_factor = float(max(0.01, missing_sigma_factor))
 
-    def evaluate(self, red_numbers: List[int], blue_number: int) -> Dict[str, Any]:
+    def evaluate(self, red_numbers: List[int], blue_number: int, periods: int = None) -> Dict[str, Any]:
         """评价双色球号码
-        
+
         Args:
             red_numbers: 红球号码列表（6个）
             blue_number: 蓝球号码（1个）
-            
+            periods: 分析期数（None表示使用全部数据）
+
         Returns:
             评价结果字典
         """
         # 加载历史数据
         history_data = self.load_history()
-        
+
+        # 如果未指定期数，使用全部数据；否则使用指定期数
+        if periods is None:
+            periods = len(history_data)
+        else:
+            periods = min(periods, len(history_data))
+
         # 1. 频率分析
-        freq_result = self._analyze_frequency(red_numbers, blue_number, history_data)
-        
+        freq_result = self._analyze_frequency(red_numbers, blue_number, history_data, periods)
+
         # 2. 遗漏分析
         missing_result = self._analyze_missing(red_numbers, blue_number, history_data)
-        
+
         # 3. 模式分析
         pattern_result = self._analyze_patterns(red_numbers)
-        
+
         # 4. 历史对比
         historical_result = self._check_historical(red_numbers, blue_number, history_data)
-        
+
         # 5. 计算得分
         scores = self._calculate_scores(freq_result, missing_result, pattern_result, historical_result)
-        
+
         # 6. 生成建议
         suggestions = self._generate_suggestions(freq_result, missing_result, pattern_result, historical_result)
-        
+
         return {
             'frequency': freq_result,
             'missing': missing_result,
