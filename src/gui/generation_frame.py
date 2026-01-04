@@ -91,13 +91,53 @@ class GenerationFrame(ttk.Frame):
         self.scoring_info_label = ttk.Label(config_frame, text="", foreground='blue', font=('', 9))
         self.scoring_info_label.grid(row=4, column=0, columnspan=4, padx=5, pady=5, sticky="w")
 
+        # --- 历史过滤设置 ---
+        filter_frame = ttk.LabelFrame(config_frame, text="历史重复过滤")
+        filter_frame.grid(row=5, column=0, columnspan=4, padx=5, pady=5, sticky="ew")
+
+        # 启用开关
+        self.history_filter_enabled_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            filter_frame,
+            text="启用历史过滤",
+            variable=self.history_filter_enabled_var,
+            command=self._on_history_filter_toggle
+        ).grid(row=0, column=0, padx=5, pady=2, sticky="w")
+
+        # 检查期数
+        ttk.Label(filter_frame, text="检查期数:").grid(row=0, column=1, padx=(15, 5), pady=2, sticky="w")
+        self.filter_periods_var = tk.IntVar(value=100)
+        self.filter_periods_spinbox = ttk.Spinbox(
+            filter_frame, from_=30, to=500,
+            textvariable=self.filter_periods_var, width=6
+        )
+        self.filter_periods_spinbox.grid(row=0, column=2, padx=5, pady=2, sticky="w")
+
+        # 最大重复数
+        ttk.Label(filter_frame, text="最大重复:").grid(row=0, column=3, padx=(15, 5), pady=2, sticky="w")
+        self.max_overlap_var = tk.IntVar(value=4)
+        self.max_overlap_spinbox = ttk.Spinbox(
+            filter_frame, from_=2, to=5,
+            textvariable=self.max_overlap_var, width=4
+        )
+        self.max_overlap_spinbox.grid(row=0, column=4, padx=5, pady=2, sticky="w")
+
+        # 提示文字
+        self.filter_hint_label = ttk.Label(
+            filter_frame,
+            text="避免推荐号码与历史开奖重复过多",
+            foreground='gray',
+            font=('', 8)
+        )
+        self.filter_hint_label.grid(row=1, column=0, columnspan=5, padx=5, pady=(0, 2), sticky="w")
+
         # 生成按钮
         self.generate_button = ttk.Button(config_frame, text="生成号码", command=self.generate_numbers)
-        self.generate_button.grid(row=5, column=0, columnspan=4, pady=10)
+        self.generate_button.grid(row=6, column=0, columnspan=4, pady=10)
 
         # 进度/状态提示
         self.status_label = ttk.Label(config_frame, text="", foreground='green')
-        self.status_label.grid(row=6, column=0, columnspan=4, pady=(0, 5))
+        self.status_label.grid(row=7, column=0, columnspan=4, pady=(0, 5))
 
         # --- 结果显示区域 ---
         result_frame = ttk.LabelFrame(self, text="推荐号码")
@@ -111,7 +151,32 @@ class GenerationFrame(ttk.Frame):
         self.clear_results()
         # 更新候选池标签文字
         self._update_pool_size_label()
+        # 更新历史过滤的最大重复数默认值
+        self._update_max_overlap_default()
         print(f"切换到彩票类型: {self.lottery_type_var.get()}")
+
+    def _on_history_filter_toggle(self):
+        """历史过滤开关切换"""
+        enabled = self.history_filter_enabled_var.get()
+        state = 'normal' if enabled else 'disabled'
+        self.filter_periods_spinbox.config(state=state)
+        self.max_overlap_spinbox.config(state=state)
+
+    def _update_max_overlap_default(self):
+        """根据彩票类型更新最大重复数默认值"""
+        lottery_type = self.lottery_type_var.get()
+        if lottery_type == 'ssq':
+            self.max_overlap_var.set(4)  # SSQ红球6个，允许重复4个
+        else:
+            self.max_overlap_var.set(3)  # DLT前区5个，允许重复3个
+
+    def _get_history_filter_config(self):
+        """获取历史过滤配置"""
+        return {
+            'enabled': self.history_filter_enabled_var.get(),
+            'check_periods': self.filter_periods_var.get(),
+            'max_overlap': self.max_overlap_var.get()
+        }
 
     def _on_strategy_change(self, event=None):
         """策略改变时更新评分参数显示和搜索参数可见性"""
@@ -248,11 +313,29 @@ class GenerationFrame(ttk.Frame):
             # 2. 创建我们全新的'smart'精英生成器
             smart_generator = create_generator('smart', lottery_type)
 
-            # 3. 调用生成方法, 这将触发后台的"精英选拔"过程
-            #    (后台日志会打印"正在进行..."信息)
-            elite_numbers = smart_generator.generate(count=num_sets)
+            # 3. 配置历史过滤（如果启用）
+            filter_config = self._get_history_filter_config()
+            if filter_config['enabled']:
+                # 设置过滤配置
+                max_overlap_key = 'max_red_overlap' if lottery_type == 'ssq' else 'max_front_overlap'
+                smart_generator.set_history_filter_config(
+                    enabled=True,
+                    check_periods=filter_config['check_periods'],
+                    **{max_overlap_key: filter_config['max_overlap']}
+                )
+                print(f"📋 历史过滤已启用: 检查{filter_config['check_periods']}期, 最大重复{filter_config['max_overlap']}个")
+            else:
+                smart_generator.set_history_filter_enabled(False)
+                print("📋 历史过滤已禁用")
 
-            # 4. 将新算法的输出格式适配到GUI期望的格式
+            # 4. 调用生成方法, 这将触发后台的"精英选拔"过程
+            #    (后台日志会打印"正在进行..."信息)
+            elite_numbers = smart_generator.generate_recommended(
+                count=num_sets,
+                enable_history_filter=filter_config['enabled']
+            )
+
+            # 5. 将新算法的输出格式适配到GUI期望的格式
             for num_obj in elite_numbers:
                 if lottery_type == 'ssq':
                     generated_sets.append({'red': num_obj.red, 'blue': num_obj.blue})
@@ -276,6 +359,16 @@ class GenerationFrame(ttk.Frame):
 
             # 创建智能生成器
             generator = SmartNumberGenerator(lottery_type)
+
+            # 配置历史过滤
+            filter_config = self._get_history_filter_config()
+            if filter_config['enabled']:
+                max_overlap_key = 'max_red_overlap' if lottery_type == 'ssq' else 'max_front_overlap'
+                generator.set_history_filter_config(
+                    enabled=True,
+                    check_periods=filter_config['check_periods'],
+                    **{max_overlap_key: filter_config['max_overlap']}
+                )
 
             # 根据策略设置模式
             if strategy == "anti_popular_strict":

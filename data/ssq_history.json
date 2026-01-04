@@ -1,7 +1,58 @@
 {
-  "fetch_time": "2025-12-26 19:52:51",
-  "total_periods": 915,
+  "fetch_time": "2026-01-03 09:54:01",
+  "total_periods": 918,
   "data": [
+    {
+      "draw_num": "2026001",
+      "draw_date": "2026-01-01",
+      "red_numbers": [
+        2,
+        6,
+        11,
+        12,
+        13,
+        33
+      ],
+      "blue_number": 15,
+      "prize_pool": 2718022399,
+      "sales": 348080190,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "2025151",
+      "draw_date": "2025-12-30",
+      "red_numbers": [
+        8,
+        9,
+        14,
+        22,
+        28,
+        30
+      ],
+      "blue_number": 4,
+      "prize_pool": 2688298050,
+      "sales": 369383528,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "2025150",
+      "draw_date": "2025-12-28",
+      "red_numbers": [
+        6,
+        13,
+        17,
+        19,
+        24,
+        31
+      ],
+      "blue_number": 8,
+      "prize_pool": 2673213583,
+      "sales": 388447078,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
     {
       "draw_num": "2025149",
       "draw_date": "2025-12-25",

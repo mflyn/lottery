@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Union
+from typing import List, Dict, Tuple, Union, Optional
 from collections import Counter
 import random
 import math
@@ -9,6 +9,7 @@ from ..models import LotteryNumber, SSQNumber, DLTNumber
 from ..ranking import rank_and_select_best, rank_and_select_best_dlt
 from ..data_manager import LotteryDataManager
 from .anti_popular import PopularityDetector, CorrelationChecker, SequenceAnalyzer
+from ..filters import HistoryDuplicateFilter
 
 class SmartNumberGenerator:
     """智能号码推荐生成器 - 支持双色球(SSQ)和大乐透(DLT)的精英选拔版"""
@@ -45,6 +46,28 @@ class SmartNumberGenerator:
                 'back_recipe': (1, 1, 0) # 2个后区号的配方 (1热,1温,0冷)
             }
         }
+
+        # 历史重复过滤配置
+        self.history_filter_config = {
+            'enabled': True,                # 是否启用历史过滤
+            'check_periods': 100,           # 检查最近N期
+            'ssq': {
+                'max_red_overlap': 4,       # 红球最多重复4个
+                'recent_strict_periods': 10, # 最近10期更严格
+                'recent_max_overlap': 3,    # 最近10期最多重复3个
+            },
+            'dlt': {
+                'max_front_overlap': 3,     # 前区最多重复3个
+                'recent_strict_periods': 10,
+                'recent_max_overlap': 2,
+            }
+        }
+
+        # 初始化历史过滤器
+        self.history_filter = HistoryDuplicateFilter(
+            lottery_type=lottery_type,
+            config=self.history_filter_config.get(lottery_type, {})
+        )
 
         # 去热门算法配置
         self.anti_popular_config = {
@@ -87,37 +110,213 @@ class SmartNumberGenerator:
             traceback.print_exc()
             return self.random_generator.generate(count)
 
-    def generate_recommended(self, count: int = 1) -> List[LotteryNumber]:
-        """生成精英推荐号码, 每一注都是优中选优的结果."""
+    def generate_recommended(self, count: int = 1,
+                              enable_history_filter: Optional[bool] = None) -> List[LotteryNumber]:
+        """生成精英推荐号码, 每一注都是优中选优的结果.
+
+        Args:
+            count: 生成数量
+            enable_history_filter: 是否启用历史过滤（None则使用默认配置）
+        """
         conf = self.config[self.lottery_type]
         history_data = self.data_manager.get_history_data(self.lottery_type)
         if history_data is None or history_data.empty or len(history_data) < conf['analysis_periods']:
             return self.random_generator.generate(count)
-        
+
         hot_cold_numbers = self._analyze_hot_cold_numbers(history_data)
-        
+
         recipes = conf.get('recipes') or conf.get('front_recipes')
         random.shuffle(recipes)
 
         ranking_function = rank_and_select_best if self.lottery_type == 'ssq' else rank_and_select_best_dlt
 
+        # 判断是否启用历史过滤
+        use_history_filter = enable_history_filter if enable_history_filter is not None else self.history_filter_config['enabled']
+
         elite_numbers = []
+        filtered_count = 0  # 统计被过滤的数量
+        retry_count = 0  # 统计重试次数
+
+        # 获取用户设置的最大重复阈值
+        if self.lottery_type == 'ssq':
+            max_overlap_threshold = self.history_filter_config.get('ssq', {}).get('max_red_overlap', 4)
+        else:
+            max_overlap_threshold = self.history_filter_config.get('dlt', {}).get('max_front_overlap', 3)
+
         for i in range(count):
             print(f"正在为[{self.lottery_type.upper()}]进行第 {i+1}/{count} 注精英号码的选拔...")
+
+            # 根据阈值严格程度动态调整候选数量
+            # 阈值越低，需要生成越多候选
+            if use_history_filter:
+                strictness_factor = max(1, 5 - max_overlap_threshold)  # 阈值2->3倍, 阈值3->2倍, 阈值4->1倍
+                batch_multiplier = 3 * strictness_factor
+            else:
+                batch_multiplier = 1
+
             candidates = []
-            batch_size = conf['batch_size_per_elite']
-            for j in range(batch_size):
-                recipe = recipes[j % len(recipes)]
-                candidate = self._generate_one_candidate(hot_cold_numbers, recipe)
-                candidates.append(candidate)
-            
-            elite_number = ranking_function(candidates)
+            batch_size = conf['batch_size_per_elite'] * batch_multiplier
+            max_retries = 5  # 最大重试次数
+
+            for attempt in range(max_retries):
+                # 生成候选号码
+                for j in range(batch_size):
+                    recipe = recipes[j % len(recipes)]
+                    candidate = self._generate_one_candidate(hot_cold_numbers, recipe)
+                    candidates.append(candidate)
+
+                # 先通过 ranking 筛选
+                ranked_candidates = self._rank_candidates(candidates, ranking_function)
+
+                # 再通过历史过滤
+                if use_history_filter:
+                    elite_number = self._select_with_history_filter(
+                        ranked_candidates, history_data, elite_numbers
+                    )
+                    if elite_number is not None:
+                        break  # 找到合格的号码，跳出重试循环
+
+                    # 检查是否还有机会找到更好的
+                    best_overlap = self._get_best_overlap(ranked_candidates, history_data)
+                    if best_overlap <= max_overlap_threshold:
+                        # 有满足阈值的候选但被其他规则拒绝了，使用它
+                        elite_number = self._select_lowest_overlap(ranked_candidates, history_data)
+                        break
+
+                    retry_count += 1
+                    print(f"  ⚠️ 第{attempt+1}次尝试未找到满足阈值({max_overlap_threshold})的号码，继续生成更多候选...")
+                    candidates = []  # 清空，重新生成
+                else:
+                    elite_number = ranked_candidates[0] if ranked_candidates else random.choice(candidates)
+                    break
+            else:
+                # 达到最大重试次数仍未找到，选择最佳的（记录警告）
+                elite_number = self._select_lowest_overlap(ranked_candidates, history_data)
+                best_overlap = self._get_best_overlap(ranked_candidates, history_data)
+                if best_overlap > max_overlap_threshold:
+                    print(f"  ⚠️ 警告：无法找到满足阈值({max_overlap_threshold})的号码，选择重复度最低({best_overlap})的候选")
+                    filtered_count += 1
+
             if elite_number:
                 elite_numbers.append(elite_number)
             else:
-                elite_numbers.append(random.choice(candidates))
+                elite_numbers.append(random.choice(candidates) if candidates else self._generate_one_candidate(hot_cold_numbers, recipes[0]))
+
+        if filtered_count > 0:
+            print(f"📊 历史过滤统计: {filtered_count}/{count} 注无法满足设定阈值({max_overlap_threshold})")
+        if retry_count > 0:
+            print(f"📊 重试统计: 共进行了 {retry_count} 次额外重试")
 
         return elite_numbers
+
+    def _rank_candidates(self, candidates: List[Union[SSQNumber, DLTNumber]],
+                         ranking_function) -> List[Union[SSQNumber, DLTNumber]]:
+        """对候选号码进行排名"""
+        # 使用 ranking_function 对候选排名，返回排序后的列表
+        scored = []
+        for c in candidates:
+            try:
+                # ranking_function 返回最佳的一个，我们需要对所有评分
+                scored.append((c, getattr(c, 'score', 0)))
+            except:
+                scored.append((c, 0))
+
+        # 按分数降序排列
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [c for c, _ in scored]
+
+    def _select_with_history_filter(self, candidates: List[Union[SSQNumber, DLTNumber]],
+                                    history_data: pd.DataFrame,
+                                    already_selected: List[Union[SSQNumber, DLTNumber]]) -> Optional[Union[SSQNumber, DLTNumber]]:
+        """使用历史过滤选择号码"""
+        check_periods = self.history_filter_config.get('check_periods', 100)
+
+        for candidate in candidates:
+            # 检查与历史数据的重复
+            result = self.history_filter.filter(candidate, history_data, check_periods)
+
+            if result.is_valid:
+                # 额外检查：与已选号码的重复度
+                if self._check_internal_overlap(candidate, already_selected):
+                    return candidate
+
+        return None
+
+    def _check_internal_overlap(self, candidate: Union[SSQNumber, DLTNumber],
+                                 already_selected: List[Union[SSQNumber, DLTNumber]]) -> bool:
+        """检查与已选号码的重复度"""
+        if not already_selected:
+            return True
+
+        max_internal_overlap = 3  # 允许的最大内部重复
+
+        for selected in already_selected:
+            if self.lottery_type == 'ssq':
+                overlap = len(set(candidate.red) & set(selected.red))
+            else:
+                overlap = len(set(candidate.front) & set(selected.front))
+
+            if overlap > max_internal_overlap:
+                return False
+
+        return True
+
+    def _select_lowest_overlap(self, candidates: List[Union[SSQNumber, DLTNumber]],
+                               history_data: pd.DataFrame) -> Optional[Union[SSQNumber, DLTNumber]]:
+        """选择重复度最低的候选"""
+        check_periods = self.history_filter_config.get('check_periods', 100)
+
+        results = self.history_filter.filter_batch(candidates, history_data, check_periods)
+
+        if results:
+            # 返回重复度最低的（已按 overlap_score 排序）
+            return results[0][0]
+
+        return candidates[0] if candidates else None
+
+    def _get_best_overlap(self, candidates: List[Union[SSQNumber, DLTNumber]],
+                          history_data: pd.DataFrame) -> int:
+        """获取候选中最低的重复数"""
+        check_periods = self.history_filter_config.get('check_periods', 100)
+
+        results = self.history_filter.filter_batch(candidates, history_data, check_periods)
+
+        if results:
+            # 返回最低的 max_overlap
+            return results[0][1].max_overlap
+
+        return 999  # 无候选时返回极大值
+
+    def set_history_filter_enabled(self, enabled: bool):
+        """设置是否启用历史过滤"""
+        self.history_filter_config['enabled'] = enabled
+
+    def set_history_filter_config(self, **kwargs):
+        """设置历史过滤配置"""
+        # 更新顶层配置
+        for key in ['enabled', 'check_periods']:
+            if key in kwargs:
+                self.history_filter_config[key] = kwargs[key]
+
+        # 更新彩种特定配置
+        lottery_config = self.history_filter_config.get(self.lottery_type, {})
+        for key in ['max_red_overlap', 'max_front_overlap', 'recent_strict_periods', 'recent_max_overlap']:
+            if key in kwargs:
+                lottery_config[key] = kwargs[key]
+
+        # 自动同步：如果设置了最大重复，近期严格阈值应更低
+        if 'max_red_overlap' in kwargs and 'recent_max_overlap' not in kwargs:
+            # 近期阈值 = 最大阈值 - 1，但至少为1
+            lottery_config['recent_max_overlap'] = max(1, kwargs['max_red_overlap'] - 1)
+        if 'max_front_overlap' in kwargs and 'recent_max_overlap' not in kwargs:
+            lottery_config['recent_max_overlap'] = max(1, kwargs['max_front_overlap'] - 1)
+
+        # 同步到过滤器
+        self.history_filter.update_config(**lottery_config)
+
+        print(f"📋 历史过滤配置已更新: check_periods={self.history_filter_config.get('check_periods')}, "
+              f"max_overlap={lottery_config.get('max_red_overlap') or lottery_config.get('max_front_overlap')}, "
+              f"recent_max={lottery_config.get('recent_max_overlap')}")
     
     def _generate_one_candidate(self, hot_cold_numbers: Dict, recipe: Tuple[int, int, int]) -> Union[SSQNumber, DLTNumber]:
         """根据分析结果和指定配方生成一个候选号码"""
