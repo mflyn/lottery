@@ -44,6 +44,15 @@ class NumberEvaluationFrame(ttk.Frame):
         # 初始化UI
         self._init_ui()
 
+    def refresh_data(self, lottery_type: str = None):
+        """刷新评价器的缓存数据（用于数据更新后生效）"""
+        if lottery_type in (None, 'ssq') and self.ssq_evaluator:
+            self.ssq_evaluator.history_data = None
+            self.ssq_evaluator.clear_cache()
+        if lottery_type in (None, 'dlt') and self.dlt_evaluator:
+            self.dlt_evaluator.history_data = None
+            self.dlt_evaluator.clear_cache()
+
     def _init_ui(self):
         """初始化界面 - 带滚动条支持"""
         # 主框架使用 pack 布局
@@ -592,9 +601,9 @@ class NumberEvaluationFrame(ttk.Frame):
             try:
                 # 调用评价器
                 if lottery_type == 'ssq':
-                    result = self.ssq_evaluator.evaluate(*numbers, periods=periods)
+                    result = self.ssq_evaluator.evaluate(*numbers, periods=periods, force_reload=True)
                 else:
-                    result = self.dlt_evaluator.evaluate(*numbers, periods=periods)
+                    result = self.dlt_evaluator.evaluate(*numbers, periods=periods, force_reload=True)
 
                 # 保存结果
                 self.current_result = {
@@ -1143,4 +1152,3 @@ class NumberEvaluationFrame(ttk.Frame):
 
         # TODO: 实现保存到收藏功能
         messagebox.showinfo("提示", "保存功能开发中...\n\n您可以使用\"导出报告\"功能保存评价结果。")
-

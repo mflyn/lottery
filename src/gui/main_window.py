@@ -707,6 +707,7 @@ class DataAnalysisFrame(ttk.Frame):
         self.history_data = pd.DataFrame() # 用于存储加载的数据
         self.update_queue = queue.Queue() # <--- 创建用于线程通信的队列
         self.is_updating = False # <--- 添加状态标志
+        self.evaluation_frame = None
         self._create_widgets()
 
     def _create_widgets(self):
@@ -845,6 +846,8 @@ class DataAnalysisFrame(ttk.Frame):
 
             if success:
                 messagebox.showinfo("更新成功", f"{self.data_manager.LOTTERY_TYPES[lottery_type]} 数据已更新。")
+                if self.evaluation_frame:
+                    self.evaluation_frame.refresh_data(lottery_type)
                 # 只有当更新的彩种是当前选中的彩种时才重新加载
                 if lottery_type == self.lottery_type_var.get():
                     self.load_data()
@@ -862,6 +865,10 @@ class DataAnalysisFrame(ttk.Frame):
 
         # 每隔 100ms 检查一次队列
         self.master.after(100, self._check_update_queue)
+
+    def set_evaluation_frame(self, evaluation_frame):
+        """设置号码评价页面实例，用于数据更新联动"""
+        self.evaluation_frame = evaluation_frame
 
     def update_data(self):
         if self.is_updating:
@@ -1377,6 +1384,7 @@ class LotteryApp:
         # 添加号码评价标签页（先创建，便于号码推荐读取其评分设置）
         from src.gui.frames.number_evaluation_frame import NumberEvaluationFrame
         self.evaluation_tab = NumberEvaluationFrame(self.notebook, self.analysis_tab.data_manager)
+        self.analysis_tab.set_evaluation_frame(self.evaluation_tab)
 
         # 添加号码推荐标签页（将评价页实例传入，联动评分配置）
         self.generation_tab = GenerationFrame(self.notebook, self.analysis_tab.data_manager, evaluation_frame=self.evaluation_tab)

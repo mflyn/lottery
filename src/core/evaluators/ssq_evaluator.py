@@ -40,19 +40,20 @@ class SSQNumberEvaluator(BaseNumberEvaluator):
         # 防止过小
         self.missing_sigma_factor = float(max(0.01, missing_sigma_factor))
 
-    def evaluate(self, red_numbers: List[int], blue_number: int, periods: int = None) -> Dict[str, Any]:
+    def evaluate(self, red_numbers: List[int], blue_number: int, periods: int = None, force_reload: bool = False) -> Dict[str, Any]:
         """评价双色球号码
 
         Args:
             red_numbers: 红球号码列表（6个）
             blue_number: 蓝球号码（1个）
             periods: 分析期数（None表示使用全部数据）
+            force_reload: 是否强制重新加载历史数据
 
         Returns:
             评价结果字典
         """
         # 加载历史数据
-        history_data = self.load_history()
+        history_data = self.load_history(force_reload=force_reload)
 
         # 如果未指定期数，使用全部数据；否则使用指定期数
         if periods is None:

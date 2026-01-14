@@ -23,13 +23,19 @@ class BaseNumberEvaluator(ABC):
         self.history_data = None
         self._cache = {}
     
-    def load_history(self) -> List[Dict]:
+    def load_history(self, force_reload: bool = False) -> List[Dict]:
         """加载历史数据
         
+        Args:
+            force_reload: 是否强制重新加载
+            
         Returns:
             历史数据列表
         """
-        if self.history_data is None:
+        if self.history_data is None or force_reload:
+            if force_reload:
+                self.clear_cache()
+            
             try:
                 with open(self.history_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)

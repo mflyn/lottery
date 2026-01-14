@@ -26,19 +26,20 @@ class DLTNumberEvaluator(BaseNumberEvaluator):
         self.front_count = 5  # 前区数量
         self.back_count = 2   # 后区数量
     
-    def evaluate(self, front_numbers: List[int], back_numbers: List[int], periods: int = None) -> Dict[str, Any]:
+    def evaluate(self, front_numbers: List[int], back_numbers: List[int], periods: int = None, force_reload: bool = False) -> Dict[str, Any]:
         """评价大乐透号码
 
         Args:
             front_numbers: 前区号码列表（5个）
             back_numbers: 后区号码列表（2个）
             periods: 分析期数（None表示使用全部数据）
+            force_reload: 是否强制重新加载历史数据
 
         Returns:
             评价结果字典
         """
         # 加载历史数据
-        history_data = self.load_history()
+        history_data = self.load_history(force_reload=force_reload)
 
         # 如果未指定期数，使用全部数据；否则使用指定期数
         if periods is None:
