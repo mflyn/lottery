@@ -364,8 +364,7 @@ class NumberEvaluationFrame(ttk.Frame):
         self.detail_notebook.pack(fill=tk.BOTH, expand=True)
 
         # 各个分析标签页
-        self.freq_text = self._create_text_tab(self.detail_notebook, "频率分析")
-        self.missing_text = self._create_text_tab(self.detail_notebook, "遗漏分析")
+        self.freq_missing_text = self._create_text_tab(self.detail_notebook, "频率/遗漏分析")
         self.pattern_text = self._create_text_tab(self.detail_notebook, "模式分析")
         self.historical_text = self._create_text_tab(self.detail_notebook, "历史对比")
         self.suggestion_text = self._create_text_tab(self.detail_notebook, "专家建议")
@@ -686,11 +685,11 @@ class NumberEvaluationFrame(ttk.Frame):
 
         # 1. 频率分析
         freq_text = self._format_frequency_analysis(result['frequency'], lottery_type)
-        self._set_text_content(self.freq_text, freq_text)
 
         # 2. 遗漏分析
         missing_text = self._format_missing_analysis(result['missing'], lottery_type)
-        self._set_text_content(self.missing_text, missing_text)
+        combined_text = f"{freq_text}\n\n{missing_text}"
+        self._set_text_content(self.freq_missing_text, combined_text)
 
         # 3. 模式分析
         pattern_text = self._format_pattern_analysis(result['pattern'], lottery_type)
@@ -1019,8 +1018,8 @@ class NumberEvaluationFrame(ttk.Frame):
 
     def _clear_detail_texts(self):
         """清空详细分析文本"""
-        for text_widget in [self.freq_text, self.missing_text, self.pattern_text,
-                           self.historical_text, self.suggestion_text]:
+        for text_widget in [self.freq_missing_text, self.pattern_text,
+                            self.historical_text, self.suggestion_text]:
             self._set_text_content(text_widget, "")
 
     def _export_report(self):
