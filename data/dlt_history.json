@@ -1,7 +1,140 @@
 {
-  "fetch_time": "2026-01-13 16:48:33",
-  "total_periods": 2823,
+  "fetch_time": "2026-01-29 12:37:27",
+  "total_periods": 2830,
   "data": [
+    {
+      "draw_num": "26012",
+      "draw_date": "2026-01-28",
+      "front_numbers": [
+        1,
+        2,
+        9,
+        22,
+        25
+      ],
+      "back_numbers": [
+        1,
+        6
+      ],
+      "prize_pool": 799554979.43,
+      "sales": 318917948,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "26011",
+      "draw_date": "2026-01-26",
+      "front_numbers": [
+        14,
+        21,
+        23,
+        29,
+        33
+      ],
+      "back_numbers": [
+        2,
+        10
+      ],
+      "prize_pool": 793323030.61,
+      "sales": 312938804,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "26010",
+      "draw_date": "2026-01-24",
+      "front_numbers": [
+        2,
+        3,
+        13,
+        18,
+        26
+      ],
+      "back_numbers": [
+        2,
+        9
+      ],
+      "prize_pool": 751872266.32,
+      "sales": 336186076,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "26009",
+      "draw_date": "2026-01-21",
+      "front_numbers": [
+        5,
+        12,
+        13,
+        14,
+        33
+      ],
+      "back_numbers": [
+        5,
+        8
+      ],
+      "prize_pool": 734360129.02,
+      "sales": 302386708,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "26008",
+      "draw_date": "2026-01-19",
+      "front_numbers": [
+        3,
+        6,
+        17,
+        21,
+        33
+      ],
+      "back_numbers": [
+        5,
+        11
+      ],
+      "prize_pool": 724155773.21,
+      "sales": 301922043,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "26007",
+      "draw_date": "2026-01-17",
+      "front_numbers": [
+        1,
+        3,
+        13,
+        20,
+        26
+      ],
+      "back_numbers": [
+        3,
+        10
+      ],
+      "prize_pool": 710693230.39,
+      "sales": 333462560,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "26006",
+      "draw_date": "2026-01-14",
+      "front_numbers": [
+        5,
+        12,
+        18,
+        23,
+        35
+      ],
+      "back_numbers": [
+        6,
+        12
+      ],
+      "prize_pool": 787011243.54,
+      "sales": 315815131,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
     {
       "draw_num": "26005",
       "draw_date": "2026-01-12",

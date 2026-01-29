@@ -8,6 +8,22 @@ import matplotlib.pyplot as plt # 恢复 pyplot 导入
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg # 恢复 canvas 导入
 import threading # <--- 导入 threading
 import queue     # <--- 导入 queue
+import json
+import numpy as np
+
+class NumpyEncoder(json.JSONEncoder):
+    """用于处理 NumPy 数据类型的 JSON 编码器"""
+    def default(self, obj):
+        if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
+                            np.int16, np.int32, np.int64, np.uint8,
+                            np.uint16, np.uint32, np.uint64)):
+            return int(obj)
+        elif isinstance(obj, (np.float_, np.float16, np.float32,
+                              np.float64)):
+            return float(obj)
+        elif isinstance(obj, (np.ndarray,)):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
 
 # --- Matplotlib 中文显示配置 ---
 try:
@@ -708,6 +724,8 @@ class DataAnalysisFrame(ttk.Frame):
         self.update_queue = queue.Queue() # <--- 创建用于线程通信的队列
         self.is_updating = False # <--- 添加状态标志
         self.evaluation_frame = None
+        self._last_loaded_periods = None
+        self._last_loaded_lottery_type = None
         self._create_widgets()
 
     def _create_widgets(self):
@@ -782,19 +800,32 @@ class DataAnalysisFrame(ttk.Frame):
         table_scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
         self.data_tree.pack(fill=tk.BOTH, expand=True)
 
-        # 右侧：分析结果和图表
+        # 右侧：分析结果和图表（Tab切换）
         analysis_display_frame = ttk.Frame(result_area)
         analysis_display_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5)
 
+        self.analysis_notebook = ttk.Notebook(analysis_display_frame)
+        self.analysis_notebook.pack(fill=tk.BOTH, expand=True)
+
+        self.summary_tab = ttk.Frame(self.analysis_notebook)
+        self.chart_tab = ttk.Frame(self.analysis_notebook)
+        self.analysis_notebook.add(self.summary_tab, text="摘要")
+        self.analysis_notebook.add(self.chart_tab, text="图表")
+        self._last_selected_tab = "summary"
+        self._last_analysis_name = "未分析"
+        self.analysis_notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+        self._set_chart_tab_visible(False)
+
         # 分析结果文本区
-        self.result_text_frame = ttk.LabelFrame(analysis_display_frame, text="分析结果", padding="5")
-        self.result_text_frame.pack(fill=tk.X, pady=(0, 5)) # 初始不扩展
+        self.result_text_frame = ttk.LabelFrame(self.summary_tab, text="分析结果", padding="5")
+        self.result_text_frame.pack(fill=tk.BOTH, expand=True)
         self.result_text = tk.Text(self.result_text_frame, height=10, wrap=tk.WORD, state=tk.DISABLED,
                                    bg='#f8f9fa', fg='#212529', insertbackground='#212529')
-        self.result_text.pack(fill=tk.X, expand=True)
+        self.result_text.pack(fill=tk.BOTH, expand=True)
+        self._default_result_text_height = 10
 
         # 图表区
-        self.chart_frame = ttk.LabelFrame(analysis_display_frame, text="图表展示", padding="5")
+        self.chart_frame = ttk.LabelFrame(self.chart_tab, text="图表展示", padding="5")
         self.chart_frame.pack(fill=tk.BOTH, expand=True) # 初始扩展
 
         # 使用 Matplotlib 创建图表
@@ -907,16 +938,51 @@ class DataAnalysisFrame(ttk.Frame):
 
     def load_data(self):
         lottery_type = self.lottery_type_var.get()
-        periods_str = self.periods_entry.get().strip()
-        periods = int(periods_str) if periods_str.isdigit() else None
+        periods, ok = self._parse_periods_entry()
+        if not ok:
+            messagebox.showerror("输入错误", "分析期数必须是正整数")
+            return
 
         try:
             self.history_data = self.data_manager.get_history_data(lottery_type, periods=periods)
             self.display_data_in_table(self.history_data)
             self._update_plot_area_options() # <--- 添加调用以更新图表区域选项
+            self._last_loaded_periods = periods
+            self._last_loaded_lottery_type = lottery_type
         except Exception as e:
             messagebox.showerror("加载错误", f"加载历史数据时发生错误: {str(e)}")
             self.history_data = pd.DataFrame()
+            self._last_loaded_periods = None
+            self._last_loaded_lottery_type = None
+
+    def _parse_periods_entry(self) -> tuple:
+        """解析期数输入，返回 (periods, ok)"""
+        periods_str = self.periods_entry.get().strip()
+        if not periods_str:
+            return None, True
+        if not periods_str.isdigit():
+            return None, False
+        periods = int(periods_str)
+        if periods <= 0:
+            return None, False
+        return periods, True
+
+    def _ensure_latest_data(self) -> bool:
+        """确保当前分析使用的历史数据与设置一致"""
+        lottery_type = self.lottery_type_var.get()
+        periods, ok = self._parse_periods_entry()
+        if not ok:
+            messagebox.showerror("输入错误", "分析期数必须是正整数")
+            return False
+
+        needs_reload = (
+            self.history_data.empty
+            or lottery_type != self._last_loaded_lottery_type
+            or periods != self._last_loaded_periods
+        )
+        if needs_reload:
+            self.load_data()
+        return not self.history_data.empty
 
     def display_data_in_table(self, df: pd.DataFrame):
         # 清空旧数据
@@ -1016,7 +1082,7 @@ class DataAnalysisFrame(ttk.Frame):
              self.data_tree.insert("", tk.END, values=display_values)
 
     def perform_analysis(self):
-        if self.history_data.empty:
+        if not self._ensure_latest_data():
             messagebox.showwarning("无法分析", "请先加载或更新数据。")
             return
 
@@ -1034,6 +1100,8 @@ class DataAnalysisFrame(ttk.Frame):
         self.result_text.config(state=tk.DISABLED)
         self.ax.clear()
         self.ax.set_title(f"{analysis_name} - {self.data_manager.LOTTERY_TYPES[lottery_type]}")
+        self._last_analysis_name = analysis_name or "未分析"
+        self._update_tab_titles(self._last_analysis_name)
 
         try:
             analyzer = None
@@ -1090,12 +1158,16 @@ class DataAnalysisFrame(ttk.Frame):
                 # <--------------------------
 
                 # 显示文本结果
-                self.display_text_results(results)
+                self.display_text_results(results, analysis_key)
 
                 # 可视化结果
                 if analysis_key == 'frequency': # 只有频率分析绘制图表
                     self.plot_frequency(results)
-                elif analysis_key not in ['pattern', 'trend']: # 其他未来可能有图表的分析
+                elif analysis_key == 'pattern':
+                    self.plot_pattern(results)
+                elif analysis_key == 'trend':
+                    self.plot_trend(results)
+                elif analysis_key not in ['trend']: # 其他未来可能有图表的分析
                     self.ax.clear()
                     self.ax.text(0.5, 0.5, '暂无此分析的图表', horizontalalignment='center', verticalalignment='center', transform=self.ax.transAxes)
 
@@ -1108,16 +1180,16 @@ class DataAnalysisFrame(ttk.Frame):
             self.canvas.draw() # 更新图表
 
             # --- 根据分析类型调整布局 --- >
-            if analysis_key in ['pattern', 'trend']: # 模式和走势暂时都隐藏图表
-                self.chart_frame.pack_forget() # 隐藏图表区域
-                # 让文本区域填充可用空间
-                self.result_text_frame.pack_configure(fill=tk.BOTH, expand=True, pady=(0, 5))
+            has_chart = analysis_key in ['frequency', 'pattern', 'trend']
+            self._set_chart_tab_visible(has_chart)
+            if not has_chart:
+                self.analysis_notebook.select(self.summary_tab)
             else:
-                # 确保文本区域恢复原样 (不垂直扩展)
-                self.result_text_frame.pack_configure(fill=tk.X, expand=False, pady=(0, 5))
-                # 检查图表区域是否已被隐藏，如果是，则重新显示
-                if not self.chart_frame.winfo_viewable(): # 使用 winfo_viewable 检查更可靠
-                    self.chart_frame.pack(fill=tk.BOTH, expand=True) # 使用原始 pack 参数重新显示
+                if self._last_selected_tab == "chart":
+                    self.analysis_notebook.select(self.chart_tab)
+                else:
+                    self.analysis_notebook.select(self.summary_tab)
+            self._set_result_text_height(self._default_result_text_height)
             # <--------------------------
 
         except Exception as e:
@@ -1300,14 +1372,335 @@ class DataAnalysisFrame(ttk.Frame):
 
         return records
 
-    def display_text_results(self, results: dict):
+    def display_text_results(self, results: dict, analysis_key: Optional[str] = None):
         self.result_text.config(state=tk.NORMAL)
         self.result_text.delete(1.0, tk.END)
-        # 格式化字典输出
-        import json
-        result_str = json.dumps(results, indent=4, ensure_ascii=False)
-        self.result_text.insert(tk.END, result_str)
+        try:
+            summary = self._format_analysis_summary(results, analysis_key)
+            self.result_text.insert(tk.END, summary)
+        except Exception as e:
+            self.result_text.insert(tk.END, f"结果显示出错: {str(e)}\n\n原始结果: {results}")
         self.result_text.config(state=tk.DISABLED)
+
+    def _format_analysis_summary(self, results: dict, analysis_key: Optional[str]) -> str:
+        """将分析结果格式化为摘要文本"""
+        lottery_type = self.lottery_type_var.get()
+        total_draws = len(self.history_data) if not self.history_data.empty else 0
+
+        if not isinstance(results, dict):
+            return f"分析结果格式异常: {results}"
+
+        # 兼容 FrequencyAnalyzer 的标准格式
+        data_content = results.get('data', results)
+
+        lines = []
+        lines.append(f"分析摘要")
+        lines.append(f"彩种: {self.data_manager.LOTTERY_TYPES.get(lottery_type, lottery_type)}")
+        if total_draws:
+            lines.append(f"使用期数: {total_draws}")
+        if analysis_key:
+            lines.append(f"分析类型: {analysis_key}")
+        lines.append("")
+
+        if analysis_key == 'frequency':
+            if lottery_type == 'ssq':
+                red_info = data_content.get('red_ball', data_content.get('red', {}))
+                blue_info = data_content.get('blue_ball', data_content.get('blue', {}))
+                lines.extend(self._summarize_frequency_section("红球", red_info, top_n=10))
+                lines.append("")
+                lines.extend(self._summarize_frequency_section("蓝球", blue_info, top_n=5))
+            else:
+                front_info = data_content.get('front_area', data_content.get('front', {}))
+                back_info = data_content.get('back_area', data_content.get('back', {}))
+                lines.extend(self._summarize_frequency_section("前区", front_info, top_n=10))
+                lines.append("")
+                lines.extend(self._summarize_frequency_section("后区", back_info, top_n=5))
+            return "\n".join(lines).strip()
+
+        if analysis_key == 'trend':
+            trends = data_content.get('trends') or data_content.get('front_trends') or data_content.get('back_trends')
+            if 'trends' in data_content:
+                trend_data = data_content['trends']
+                red_avg = trend_data.get('red_moving_avg', [])
+                blue_avg = trend_data.get('blue_moving_avg', [])
+                window_size = trend_data.get('window_size')
+                if window_size:
+                    lines.append(f"移动平均窗口: {window_size}")
+                if red_avg:
+                    lines.append(f"红球均值(最新): {red_avg[-1]:.2f} (共 {len(red_avg)} 个窗口)")
+                if blue_avg:
+                    lines.append(f"蓝球均值(最新): {blue_avg[-1]:.2f} (共 {len(blue_avg)} 个窗口)")
+            elif isinstance(trends, list):
+                lines.append(f"走势矩阵大小: {len(trends)} 行")
+            else:
+                lines.append("走势结果格式暂不支持摘要展示")
+            return "\n".join(lines).strip()
+
+        if analysis_key == 'pattern':
+            lines.append("模式分析摘要")
+            section = self._select_pattern_section(data_content)
+            if not section:
+                lines.append("模式分析数据缺失")
+                return "\n".join(lines).strip()
+
+            odd_even = section.get('odd_even_ratio', {})
+            span = section.get('span', {})
+            consecutive = section.get('consecutive', {})
+            sum_range = section.get('sum_range', {})
+
+            if odd_even:
+                top_ratio = odd_even.get('most_common_ratio')
+                dist = odd_even.get('ratio_distribution', [])
+                top_items = " ".join([f"{r}({c})" for r, c in dist[:3]]) if dist else "无"
+                lines.append(f"奇偶比例Top: {top_items}")
+                if top_ratio:
+                    lines.append(f"最常见奇偶比: {top_ratio[0]} ({top_ratio[1]} 次)")
+            if span:
+                lines.append(f"跨度范围: {span.get('min')} - {span.get('max')}, 平均: {span.get('avg'):.2f}")
+                span_dist = span.get('distribution', [])
+                if span_dist:
+                    lines.append(f"跨度Top: " + " ".join([f"{v}({c})" for v, c in span_dist[:5]]))
+            if sum_range:
+                lines.append(f"和值范围: {sum_range.get('min')} - {sum_range.get('max')}, 平均: {sum_range.get('avg'):.2f}")
+                sum_dist = sum_range.get('distribution', [])
+                if sum_dist:
+                    lines.append(f"和值Top: " + " ".join([f"{v}({c})" for v, c in sum_dist[:5]]))
+            zone_dist = section.get('zone_distribution', {})
+            zone_ranges = zone_dist.get('ranges', [])
+            if zone_ranges:
+                lines.append("区间分布Top: " + " ".join([
+                    f"{item['range']}({item['count']})" for item in zone_ranges[:4]
+                ]))
+            if consecutive:
+                lines.append(f"连号比例: {consecutive.get('ratio_with_consecutive', 0):.2%}")
+                lines.append(f"最长连号: {consecutive.get('max_run', 0)}")
+                pair_dist = consecutive.get('pair_count_distribution', [])
+                if pair_dist:
+                    lines.append(f"连号对数Top: " + " ".join([f"{v}({c})" for v, c in pair_dist[:5]]))
+            return "\n".join(lines).strip()
+
+        # 默认：紧凑 JSON
+        return json.dumps(results, indent=2, ensure_ascii=False, cls=NumpyEncoder)
+
+    def _summarize_frequency_section(self, label: str, info: dict, top_n: int = 10) -> List[str]:
+        """频率分析摘要"""
+        lines = [f"{label}频率:"]
+        if not info:
+            lines.append(f"{label}数据缺失")
+            return lines
+
+        hot_list = info.get(f'top_{top_n}_hot') or info.get('top_10_hot') or info.get('top_5_hot') or []
+        cold_list = info.get(f'top_{top_n}_cold') or info.get('top_10_cold') or info.get('top_5_cold') or []
+        freq = info.get('frequency') or info.get('frequencies') or {}
+
+        def format_top(items):
+            formatted = []
+            for item in items:
+                number = item.get('number')
+                frequency = item.get('frequency')
+                if number is None:
+                    continue
+                if frequency is None and freq:
+                    frequency = freq.get(number, freq.get(str(number), 0))
+                formatted.append(f"{number}({frequency})")
+            return " ".join(formatted) if formatted else "无"
+
+        lines.append(f"热号Top: {format_top(hot_list)}")
+        lines.append(f"冷号Top: {format_top(cold_list)}")
+        return lines
+
+    def _set_result_text_height(self, height: int):
+        """调整分析结果文本框高度"""
+        try:
+            self.result_text.configure(height=height)
+        except Exception:
+            pass
+
+    def _set_chart_tab_visible(self, visible: bool):
+        """显示/隐藏图表Tab"""
+        try:
+            tabs = self.analysis_notebook.tabs()
+            if visible:
+                if str(self.chart_tab) not in tabs:
+                    title = f"图表 - {self._last_analysis_name}"
+                    self.analysis_notebook.add(self.chart_tab, text=title)
+            else:
+                if str(self.chart_tab) in tabs:
+                    self.analysis_notebook.hide(self.chart_tab)
+        except Exception:
+            pass
+
+    def _on_tab_changed(self, event=None):
+        """记住用户上次选择的Tab"""
+        try:
+            current = self.analysis_notebook.select()
+            if current == str(self.chart_tab):
+                self._last_selected_tab = "chart"
+            else:
+                self._last_selected_tab = "summary"
+        except Exception:
+            pass
+
+    def _update_tab_titles(self, analysis_name: str):
+        """更新Tab标题为含分析类型的文本"""
+        try:
+            summary_title = f"摘要 - {analysis_name}"
+            chart_title = f"图表 - {analysis_name}"
+            self.analysis_notebook.tab(self.summary_tab, text=summary_title)
+            # chart_tab 可能被隐藏，仍可设置标题
+            self.analysis_notebook.tab(self.chart_tab, text=chart_title)
+        except Exception:
+            pass
+
+    def _select_pattern_section(self, data_content: dict) -> dict:
+        """根据彩种和区域选择模式分析数据"""
+        lottery_type = self.lottery_type_var.get()
+        plot_area = self.plot_area_var.get()
+
+        if lottery_type == 'ssq':
+            if plot_area == 'blue':
+                return data_content.get('blue', {})
+            return data_content.get('red', {})
+        if lottery_type == 'dlt':
+            if plot_area == 'back':
+                return data_content.get('back', {})
+            return data_content.get('front', {})
+        return {}
+
+    def plot_pattern(self, results: dict):
+        """绘制模式分析图表"""
+        data_content = results.get('data', results)
+        section = self._select_pattern_section(data_content)
+        self.fig.clear()
+
+        if not section:
+            ax = self.fig.add_subplot(111)
+            ax.text(0.5, 0.5, '模式分析数据缺失', horizontalalignment='center',
+                    verticalalignment='center', transform=ax.transAxes)
+            self.canvas.draw()
+            return
+
+        # 创建3x2子图
+        ax1 = self.fig.add_subplot(321)
+        ax2 = self.fig.add_subplot(322)
+        ax3 = self.fig.add_subplot(323)
+        ax4 = self.fig.add_subplot(324)
+        ax5 = self.fig.add_subplot(325)
+        ax6 = self.fig.add_subplot(326)
+
+        # 奇偶比例
+        odd_even = section.get('odd_even_ratio', {})
+        dist = odd_even.get('ratio_distribution', [])
+        if dist:
+            labels = [r for r, _ in dist[:8]]
+            values = [c for _, c in dist[:8]]
+            ax1.bar(labels, values)
+            ax1.set_title("奇偶比例")
+            ax1.tick_params(axis='x', rotation=45, labelsize=8)
+        else:
+            ax1.text(0.5, 0.5, '无奇偶数据', ha='center', va='center')
+
+        # 跨度分布
+        span = section.get('span', {})
+        span_dist = span.get('distribution', [])
+        if span_dist:
+            labels = [str(v) for v, _ in span_dist[:10]]
+            values = [c for _, c in span_dist[:10]]
+            ax2.bar(labels, values)
+            ax2.set_title("跨度分布")
+            ax2.tick_params(axis='x', rotation=45, labelsize=8)
+        else:
+            ax2.text(0.5, 0.5, '无跨度数据', ha='center', va='center')
+
+        # 和值分布
+        sum_range = section.get('sum_range', {})
+        sum_dist = sum_range.get('distribution', [])
+        if sum_dist:
+            labels = [str(v) for v, _ in sum_dist[:10]]
+            values = [c for _, c in sum_dist[:10]]
+            ax3.bar(labels, values)
+            ax3.set_title("和值分布")
+            ax3.tick_params(axis='x', rotation=45, labelsize=8)
+        else:
+            ax3.text(0.5, 0.5, '无和值数据', ha='center', va='center')
+
+        # 连号对数分布
+        consecutive = section.get('consecutive', {})
+        pair_dist = consecutive.get('pair_count_distribution', [])
+        if pair_dist:
+            labels = [str(v) for v, _ in pair_dist[:6]]
+            values = [c for _, c in pair_dist[:6]]
+            ax4.bar(labels, values)
+            ax4.set_title("连号对数")
+            ax4.tick_params(axis='x', rotation=45, labelsize=8)
+        else:
+            ax4.text(0.5, 0.5, '无连号数据', ha='center', va='center')
+
+        # 区间分布
+        zone = section.get('zone_distribution', {})
+        zone_ranges = zone.get('ranges', [])
+        if zone_ranges:
+            labels = [item['range'] for item in zone_ranges]
+            values = [item['count'] for item in zone_ranges]
+            ax5.bar(labels, values)
+            ax5.set_title("区间分布")
+            ax5.tick_params(axis='x', rotation=45, labelsize=8)
+        else:
+            ax5.text(0.5, 0.5, '无区间数据', ha='center', va='center')
+
+        # 空白填充
+        ax6.axis('off')
+
+        self.fig.tight_layout()
+        self.canvas.draw()
+
+    def plot_trend(self, results: dict):
+        """绘制走势分析图表"""
+        self.fig.clear()
+        ax = self.fig.add_subplot(111)
+
+        data_content = results.get('data', results)
+        lottery_type = self.lottery_type_var.get()
+        plot_area = self.plot_area_var.get()
+
+        if lottery_type == 'ssq':
+            trend_data = data_content.get('trends', {})
+            red_avg = trend_data.get('red_moving_avg', [])
+            blue_avg = trend_data.get('blue_moving_avg', [])
+            if red_avg:
+                ax.plot(range(1, len(red_avg) + 1), red_avg, label="红球均值")
+            if blue_avg:
+                ax.plot(range(1, len(blue_avg) + 1), blue_avg, label="蓝球均值")
+            if red_avg or blue_avg:
+                ax.set_title("走势分析（移动平均）")
+                ax.set_xlabel("窗口序号")
+                ax.set_ylabel("均值")
+                ax.legend()
+            else:
+                ax.text(0.5, 0.5, '走势数据为空', horizontalalignment='center',
+                        verticalalignment='center', transform=ax.transAxes)
+        else:
+            # DLT: 使用出现矩阵绘制热力图
+            trends = None
+            if plot_area == 'back':
+                trends = data_content.get('back_trends')
+                title = "后区走势热力图"
+            else:
+                trends = data_content.get('front_trends')
+                title = "前区走势热力图"
+
+            if trends:
+                matrix = np.array(trends)
+                ax.imshow(matrix, aspect='auto', cmap='Reds', interpolation='nearest')
+                ax.set_title(title)
+                ax.set_xlabel("号码")
+                ax.set_ylabel("期序")
+            else:
+                ax.text(0.5, 0.5, '走势数据为空', horizontalalignment='center',
+                        verticalalignment='center', transform=ax.transAxes)
+
+        self.fig.tight_layout()
+        self.canvas.draw()
 
     def plot_frequency(self, results: dict):
         if not results or not isinstance(results, dict):
@@ -1319,31 +1712,45 @@ class DataAnalysisFrame(ttk.Frame):
         area_data = None
         area_label = "号码"
 
+        # 获取数据字典 (兼容新旧版本)
+        data_content = results.get('data', results)
+
         # 根据彩种和选择的区域获取数据
         if lottery_type == 'ssq':
-            if plot_area == 'red' and 'red' in results:
-                area_data = results['red'].get('frequencies')
+            if plot_area == 'red':
+                red_info = data_content.get('red_ball', data_content.get('red', {}))
+                area_data = red_info.get('frequency', red_info.get('frequencies'))
                 area_label = "红球号码"
-            elif plot_area == 'blue' and 'blue' in results:
-                area_data = results['blue'].get('frequencies')
+            elif plot_area == 'blue':
+                blue_info = data_content.get('blue_ball', data_content.get('blue', {}))
+                area_data = blue_info.get('frequency', blue_info.get('frequencies'))
                 area_label = "蓝球号码"
         elif lottery_type == 'dlt':
-            if plot_area == 'front' and 'front' in results:
-                area_data = results['front'].get('frequencies')
+            if plot_area == 'front':
+                front_info = data_content.get('front_area', data_content.get('front', {}))
+                area_data = front_info.get('frequency', front_info.get('frequencies'))
                 area_label = "前区号码"
-            elif plot_area == 'back' and 'back' in results:
-                area_data = results['back'].get('frequencies')
+            elif plot_area == 'back':
+                back_info = data_content.get('back_area', data_content.get('back', {}))
+                area_data = back_info.get('frequency', back_info.get('frequencies'))
                 area_label = "后区号码"
 
         if area_data is None or not isinstance(area_data, dict) or not area_data:
              self.ax.text(0.5, 0.5, f'{plot_area} 频率数据缺失或格式错误', horizontalalignment='center', verticalalignment='center', transform=self.ax.transAxes)
              return
 
-        # 绘制频率图 (注意 key 是字符串)
+        # 绘制频率图
         try:
-            # 将字典的键（字符串）转为整数用于排序和绘图，值保持不变
+            # 将字典的键转为整数用于排序和绘图
             numbers = sorted([int(k) for k in area_data.keys()])
-            frequencies = [area_data[str(n)] for n in numbers]
+            # 兼容整数或字符串类型的键
+            frequencies = []
+            for n in numbers:
+                if n in area_data:
+                    frequencies.append(area_data[n])
+                else:
+                    # 尝试字符串形式
+                    frequencies.append(area_data.get(str(n), 0))
 
             self.ax.bar(numbers, frequencies)
             self.ax.set_xlabel(area_label)
@@ -1426,6 +1833,13 @@ class LotteryToolsGUI:
         self.root.title("彩票工具集")
         self.root.geometry("1000x700")
         self.root.minsize(800, 600)
+
+        # macOS: 点击 Dock 图标时恢复窗口
+        try:
+            if self.root.tk.call('tk', 'windowingsystem') == 'aqua':
+                self.root.createcommand('tk::mac::ReopenApplication', self._on_reopen)
+        except Exception:
+            pass
         
         # 设置窗口图标（如果有的话）
         try:
@@ -1438,6 +1852,15 @@ class LotteryToolsGUI:
         """创建应用程序主界面"""
         # 使用现有的LotteryApp类
         self.app = LotteryApp(self.root)
+
+    def _on_reopen(self):
+        """macOS Dock 重新打开时恢复窗口"""
+        try:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
+        except Exception:
+            pass
     
     def run(self):
         """运行应用程序"""

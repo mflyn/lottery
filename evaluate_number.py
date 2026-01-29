@@ -177,7 +177,7 @@ def check_historical_appearance(history_data: List[Dict], red_numbers: List[int]
         'blue_appearance': blue_match_count
     }
 
-def evaluate_number(red_numbers: List[int], blue_number: int, history_data: List[Dict]) -> Dict:
+def evaluate_number(red_numbers: List[int], blue_number: int, history_data: List[Dict], periods: int = 100) -> Dict:
     """综合评价号码"""
     print("=" * 80)
     print("双色球号码统计评价报告")
@@ -185,10 +185,10 @@ def evaluate_number(red_numbers: List[int], blue_number: int, history_data: List
     print(f"\n待评价号码: 红球 {red_numbers} | 蓝球 {blue_number}")
     print("\n" + "-" * 80)
     
-    # 1. 频率分析（最近100期）
-    print("\n【1. 频率分析】（基于最近100期）")
+    # 1. 频率分析
+    print(f"\n【1. 频率分析】（基于最近{periods}期）")
     print("-" * 80)
-    freq_analysis = analyze_frequency(history_data, periods=100)
+    freq_analysis = analyze_frequency(history_data, periods=periods)
     
     print("\n红球频率分析:")
     red_freq_scores = []

@@ -1,7 +1,126 @@
 {
-  "fetch_time": "2026-01-14 16:11:53",
-  "total_periods": 923,
+  "fetch_time": "2026-01-29 23:08:52",
+  "total_periods": 930,
   "data": [
+    {
+      "draw_num": "2026013",
+      "draw_date": "2026-01-29",
+      "red_numbers": [
+        4,
+        9,
+        12,
+        13,
+        16,
+        20
+      ],
+      "blue_number": 1,
+      "prize_pool": 2961315457,
+      "sales": 380549690,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "2026012",
+      "draw_date": "2026-01-27",
+      "red_numbers": [
+        3,
+        5,
+        7,
+        16,
+        20,
+        24
+      ],
+      "blue_number": 8,
+      "prize_pool": 2925358915,
+      "sales": 358422924,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "2026011",
+      "draw_date": "2026-01-25",
+      "red_numbers": [
+        2,
+        3,
+        4,
+        20,
+        31,
+        32
+      ],
+      "blue_number": 4,
+      "prize_pool": 2925771107,
+      "sales": 394441490,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "2026010",
+      "draw_date": "2026-01-22",
+      "red_numbers": [
+        4,
+        9,
+        10,
+        15,
+        19,
+        26
+      ],
+      "blue_number": 12,
+      "prize_pool": 2865932466,
+      "sales": 358486254,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "2026009",
+      "draw_date": "2026-01-20",
+      "red_numbers": [
+        3,
+        6,
+        13,
+        19,
+        23,
+        25
+      ],
+      "blue_number": 10,
+      "prize_pool": 2924245047,
+      "sales": 347159860,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "2026008",
+      "draw_date": "2026-01-18",
+      "red_numbers": [
+        6,
+        9,
+        16,
+        27,
+        31,
+        33
+      ],
+      "blue_number": 10,
+      "prize_pool": 2921931052,
+      "sales": 388652642,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
+    {
+      "draw_num": "2026007",
+      "draw_date": "2026-01-15",
+      "red_numbers": [
+        9,
+        13,
+        19,
+        27,
+        29,
+        30
+      ],
+      "blue_number": 1,
+      "prize_pool": 2890464389,
+      "sales": 360236814,
+      "first_prize_num": 0,
+      "first_prize_amount": 0
+    },
     {
       "draw_num": "2026006",
       "draw_date": "2026-01-13",
