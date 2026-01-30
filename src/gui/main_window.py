@@ -780,9 +780,12 @@ class DataAnalysisFrame(ttk.Frame):
         result_area = ttk.Frame(self)
         result_area.pack(fill=tk.BOTH, expand=True)
 
+        # 使用可拖动分割栏，调整左右比例
+        result_pane = tk.PanedWindow(result_area, orient=tk.HORIZONTAL, sashrelief=tk.RAISED)
+        result_pane.pack(fill=tk.BOTH, expand=True)
+
         # 左侧：历史数据表格
-        table_frame = ttk.LabelFrame(result_area, text="历史数据", padding="5")
-        table_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        table_frame = ttk.LabelFrame(result_pane, text="历史数据", padding="5")
 
         # 表格滚动条
         table_scroll_y = ttk.Scrollbar(table_frame, orient=tk.VERTICAL)
@@ -801,8 +804,12 @@ class DataAnalysisFrame(ttk.Frame):
         self.data_tree.pack(fill=tk.BOTH, expand=True)
 
         # 右侧：分析结果和图表（Tab切换）
-        analysis_display_frame = ttk.Frame(result_area)
-        analysis_display_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5)
+        analysis_display_frame = ttk.Frame(result_pane)
+
+        result_pane.add(table_frame, stretch="always")
+        result_pane.add(analysis_display_frame, stretch="always")
+        result_pane.paneconfigure(table_frame, minsize=320)
+        result_pane.paneconfigure(analysis_display_frame, minsize=420)
 
         self.analysis_notebook = ttk.Notebook(analysis_display_frame)
         self.analysis_notebook.pack(fill=tk.BOTH, expand=True)
@@ -821,6 +828,9 @@ class DataAnalysisFrame(ttk.Frame):
         self.result_text_frame.pack(fill=tk.BOTH, expand=True)
         self.result_text = tk.Text(self.result_text_frame, height=10, wrap=tk.WORD, state=tk.DISABLED,
                                    bg='#f8f9fa', fg='#212529', insertbackground='#212529')
+        result_text_scroll = ttk.Scrollbar(self.result_text_frame, orient=tk.VERTICAL, command=self.result_text.yview)
+        result_text_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.result_text.configure(yscrollcommand=result_text_scroll.set)
         self.result_text.pack(fill=tk.BOTH, expand=True)
         self._default_result_text_height = 10
 
