@@ -10,20 +10,7 @@ import threading # <--- 导入 threading
 import queue     # <--- 导入 queue
 import json
 import numpy as np
-
-class NumpyEncoder(json.JSONEncoder):
-    """用于处理 NumPy 数据类型的 JSON 编码器"""
-    def default(self, obj):
-        if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
-                            np.int16, np.int32, np.int64, np.uint8,
-                            np.uint16, np.uint32, np.uint64)):
-            return int(obj)
-        elif isinstance(obj, (np.float_, np.float16, np.float32,
-                              np.float64)):
-            return float(obj)
-        elif isinstance(obj, (np.ndarray,)):
-            return obj.tolist()
-        return json.JSONEncoder.default(self, obj)
+from src.utils.helpers import NumpyEncoder
 
 # --- Matplotlib 中文显示配置 ---
 try:
@@ -55,7 +42,7 @@ from src.core.ssq_calculator import SSQCalculator
 from src.core.dlt_calculator import DLTCalculator # 导入大乐透计算器
 from src.core.data_manager import LotteryDataManager # 导入数据管理器
 # 统一从 analyzers 模块导入分析器
-from src.core.analyzers import FrequencyAnalyzer, PatternAnalyzer, DLTAnalyzer
+from src.core.analyzers import AnalyzerFactory
 from src.core.ssq_analyzer import SSQAnalyzer
 from src.gui.generation_frame import GenerationFrame # 导入新的 Frame
 from src.gui.feature_engineering_frame import FeatureEngineeringFrame # 导入特征工程 Frame
@@ -1114,22 +1101,13 @@ class DataAnalysisFrame(ttk.Frame):
         self._update_tab_titles(self._last_analysis_name)
 
         try:
-            analyzer = None
-            # --- 修改：使用内部 key 进行判断 --- >
-            if analysis_key == 'frequency':
-                analyzer = FrequencyAnalyzer(lottery_type)
-            elif analysis_key == 'pattern':
-                analyzer = PatternAnalyzer(lottery_type)
-            elif analysis_key == 'trend':
-                # 走势分析在 SSQAnalyzer/DLTAnalyzer 中实现
-                if lottery_type == 'ssq':
-                    analyzer = SSQAnalyzer() # 实例化对应的具体分析器
-                elif lottery_type == 'dlt':
-                    analyzer = DLTAnalyzer()
-                else:
-                    analyzer = None # 不支持的类型
+            # --- 修改：使用工厂类获取分析器 --- >
+            try:
+                analyzer = AnalyzerFactory.get_analyzer(analysis_key, lottery_type)
+            except Exception as factory_err:
+                analyzer = None
+                print(f"Factory failed to create analyzer: {factory_err}")
             # <---------------------------------
-            # TODO: 添加更多分析器选择
 
             if analyzer:
                 # --- 数据预处理 --- >

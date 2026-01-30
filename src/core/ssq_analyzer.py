@@ -245,11 +245,17 @@ class SSQAnalyzer:
         """
         self.data_fetcher = data_fetcher or SSQDataFetcher()
         self.debug_mode = debug_mode
+        
+        # 优化 Matplotlib 中文显示配置
+        font_list = ['PingFang SC', 'Heiti SC', 'Songti SC', 'AppleGothic', 
+                     'Arial Unicode MS', 'SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei']
         self.plot_style = {
             'figure.figsize': (12, 8),
-            'font.sans-serif': ['SimHei'],  # 支持中文显示
+            'font.sans-serif': font_list,
             'axes.unicode_minus': False
         }
+        plt.rcParams.update(self.plot_style)
+        
         self.models = {
             'random_forest': RandomForestClassifier(),
             'gradient_boost': GradientBoostingClassifier(),

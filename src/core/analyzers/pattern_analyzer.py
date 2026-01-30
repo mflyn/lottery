@@ -1,50 +1,7 @@
 from typing import Dict, List, Any
 import pandas as pd
 from collections import Counter
-
-def _ensure_int_list(value) -> List[int]:
-    """将各种格式的号码值转换为整数列表"""
-    if value is None:
-        return []
-    if hasattr(value, 'tolist') and not isinstance(value, (str, bytes)):
-        return _ensure_int_list(value.tolist())
-    if isinstance(value, (list, tuple, set)):
-        result = []
-        for item in value:
-            try:
-                if pd.isna(item):
-                    continue
-            except TypeError:
-                pass
-            try:
-                result.append(int(item))
-            except (TypeError, ValueError):
-                continue
-        return result
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return []
-        if text.startswith('[') and text.endswith(']'):
-            text = text[1:-1]
-        text = text.replace('，', ',').replace('、', ',').replace(';', ',').replace('；', ',')
-        parts = [p.strip() for p in text.replace(' ', ',').split(',') if p.strip()]
-        result = []
-        for part in parts:
-            try:
-                result.append(int(float(part)))
-            except ValueError:
-                continue
-        return result
-    try:
-        if pd.isna(value):
-            return []
-    except TypeError:
-        pass
-    try:
-        return [int(value)]
-    except (TypeError, ValueError):
-        return []
+from src.utils.helpers import ensure_int_list
 
 class PatternAnalyzer:
     """号码模式分析器"""
@@ -122,7 +79,7 @@ class PatternAnalyzer:
         # 规范化为列表序列
         normalized: List[List[int]] = []
         for value in numbers:
-            nums = _ensure_int_list(value)
+            nums = ensure_int_list(value)
             if nums:
                 normalized.append(sorted(nums))
 
