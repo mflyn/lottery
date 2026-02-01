@@ -604,6 +604,12 @@ class NumberEvaluationFrame(ttk.Frame):
                 else:
                     result = self.dlt_evaluator.evaluate(*numbers, periods=periods, force_reload=True)
 
+                # 记录本次评价使用的分析期数，供显示文本使用
+                try:
+                    result['_periods_used'] = periods
+                except Exception:
+                    pass
+
                 # 保存结果
                 self.current_result = {
                     'lottery_type': lottery_type,
@@ -684,7 +690,8 @@ class NumberEvaluationFrame(ttk.Frame):
         lottery_type = self.lottery_type_var.get()
 
         # 1. 频率分析
-        freq_text = self._format_frequency_analysis(result['frequency'], lottery_type)
+        periods = result.get('_periods_used', None)
+        freq_text = self._format_frequency_analysis(result['frequency'], lottery_type, periods=periods)
 
         # 2. 遗漏分析
         missing_text = self._format_missing_analysis(result['missing'], lottery_type)
@@ -703,11 +710,20 @@ class NumberEvaluationFrame(ttk.Frame):
         suggestion_text = self._format_suggestions(result['suggestions'])
         self._set_text_content(self.suggestion_text, suggestion_text)
 
-    def _format_frequency_analysis(self, freq_data: Dict, lottery_type: str) -> str:
-        """格式化频率分析"""
+    def _format_frequency_analysis(self, freq_data: Dict, lottery_type: str, periods=None) -> str:
+        """格式化频率分析
+
+        Args:
+            freq_data: 频率数据
+            lottery_type: 彩种
+            periods: 分析使用的期数, None 表示全部
+        """
         lines = []
         lines.append("=" * 80)
-        lines.append("频率分析（基于最近100期）")
+        if periods is None:
+            lines.append("频率分析（基于全部历史数据）")
+        else:
+            lines.append(f"频率分析（基于最近{periods}期）")
         lines.append("=" * 80)
         lines.append("")
 
@@ -1102,7 +1118,7 @@ class NumberEvaluationFrame(ttk.Frame):
 
         lines.append("### 1. 频率分析")
         lines.append("```")
-        lines.append(self._format_frequency_analysis(eval_result['frequency'], lottery_type))
+        lines.append(self._format_frequency_analysis(eval_result['frequency'], lottery_type, periods=eval_result.get('_periods_used', None)))
         lines.append("```")
         lines.append("")
 
