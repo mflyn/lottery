@@ -107,3 +107,71 @@ if __name__ == "__main__":
 - [pip用户指南](https://pip.pypa.io/)
 - [virtualenv文档](https://virtualenv.pypa.io/)
 - [清华PyPI镜像使用帮助](https://mirrors.tuna.tsinghua.edu.cn/help/pypi/)
+
+## 10. 完整测试环境与可选功能
+
+以仓库中的 `requirements.txt` 为完整依赖清单，包含 Excel 读写所需的
+`openpyxl`/`xlrd`，以及模型解释所需的 `shap`/`lime`：
+
+```bash
+.venv/bin/python -m pip install -r requirements.txt
+```
+
+`pyproject.toml` 也将这两组依赖声明为 `excel` 和 `explain` 可选依赖。
+模型解释器在调用对应功能时才导入 SHAP/LIME。
+SHAP 声明的最低版本为 0.44.1，以保留项目的 Python 3.8 依赖解析范围；
+该版本的 Python 要求见 [PyPI 元数据](https://pypi.org/project/shap/0.44.1/)。
+本次运行验证使用现有 Python 3.13 环境，不代表已验证 Python 3.8 的完整运行兼容性。
+
+macOS 上如果 XGBoost 报 `Library not loaded: @rpath/libomp.dylib`，安装
+OpenMP 运行库后重新验证导入：
+
+```bash
+brew install libomp
+.venv/bin/python -c "import xgboost; print(xgboost.__version__)"
+```
+
+默认测试命令使用 importlib 导入模式，允许不同目录存在同名测试文件：
+
+```bash
+.venv/bin/python -m pytest
+```
+
+真实窗口测试标记为 `gui`，默认不运行，避免无桌面环境中的 Tk 进程中止。
+不创建窗口的控制器测试仍包含在默认测试中。请在已登录的图形桌面会话中使用
+带子进程预检的入口，单独运行真实窗口测试：
+
+```bash
+.venv/bin/python tests/gui/run_gui_tests.py -q
+```
+
+也可在同一个桌面会话中运行包含窗口测试的完整测试集：
+
+```bash
+.venv/bin/python tests/gui/run_gui_tests.py --all -q
+```
+
+入口先在独立进程中执行 Tk 创建、显示与销毁。预检若中止或超时，会返回非零退出码
+并打印诊断，且不会启动 pytest；这不算测试通过或跳过。原生 `SIGABRT` 发生在 Python
+异常处理之外，不能用普通 `try/except` 保护同一进程。
+
+2026-11-03 本机对照验证：同一套 Python 3.13.0 / Tk 8.6.14 (aqua) 的最小程序在
+受限沙箱内返回 `-6` (`SIGABRT`)，在允许访问桌面的执行环境中返回 `0`。因此该次
+启动中止与桌面执行权限有关，未更换 Python/Tk 版本。受限环境请使用桌面执行权限
+运行上述入口，或直接在本机终端的图形桌面会话中运行。
+
+真实窗口测试使用临时 JSON 历史数据，禁止网络访问，覆盖当前五个标签页、切换、数据展示、
+实际号码生成，以及双色球和大乐透的异步评价、结果展示与实际报告文件导出。
+
+后台关闭测试用线程 Event 控制任务时序，确认任务仍在执行时通过 `WM_DELETE_WINDOW`
+关闭根窗口，再放行任务并等待其退出。覆盖统计优选、去热门、最高评分三种生成路径、
+数据更新，以及两个彩种评价的成功/失败返回；检查关闭及时、无后台 Tk 访问、无线程异常、
+无迟到弹窗或评价状态写入。更新测试保留实际 JSON 合并与保存，仅替换在线取数边界；
+评价测试使用实际评价器；最高评分关闭测试替换昂贵搜索边界。
+
+生成任务在主线程读取控件设置，再传递普通 Python 参数给工作线程。评价任务通过结果
+队列交回主线程更新界面，销毁时取消轮询并丢弃迟到结果。关闭窗口不会强制终止计算或
+正在进行的数据更新；它们可以在后台完成，期间不再操作 Tk 控件。真实窗口测试还验证了
+打开窗口时的错误提示、生成失败后的控件恢复和再次生成，以及空闲销毁后的回调清理。
+
+如果 Matplotlib 默认缓存目录不可写，可将 `MPLCONFIGDIR` 设置为可写临时目录。

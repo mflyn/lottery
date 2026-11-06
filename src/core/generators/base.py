@@ -7,6 +7,8 @@ class NumberGenerator(ABC):
     """号码生成器基类"""
 
     def __init__(self, lottery_type: str, config_manager: Optional[ConfigManager] = None):
+        if lottery_type not in ('ssq', 'dlt'):
+            raise ValueError(f"不支持的彩票类型: {lottery_type}")
         self.lottery_type = lottery_type
         self.config_manager = config_manager or ConfigManager()
         self.config = self._get_config()

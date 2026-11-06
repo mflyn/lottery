@@ -20,7 +20,7 @@ class DLTFeatureProcessor(BaseFeatureProcessor):
             raise ValueError("Invalid number format: front numbers must be 5 numbers, back numbers must be 2 numbers")
         
         # 继续处理特征提取...
-        features = pd.DataFrame()
+        features = pd.DataFrame(index=data.index)
         
         # 前区号码特征
         front_numbers = data['front_numbers'].apply(pd.Series)
@@ -37,7 +37,7 @@ class DLTFeatureProcessor(BaseFeatureProcessor):
     
     def extract_advanced_features(self, data: pd.DataFrame) -> pd.DataFrame:
         """提取高级特征"""
-        features = pd.DataFrame()
+        features = pd.DataFrame(index=data.index)
         
         # 计算前区号码间隔
         front_gaps = self.calculate_gaps(data['front_numbers'])
@@ -50,7 +50,7 @@ class DLTFeatureProcessor(BaseFeatureProcessor):
 
         # 分析前区号码模式
         front_patterns = self.analyze_patterns(data['front_numbers'])
-        features = pd.concat([features, pd.DataFrame(front_patterns)], axis=1)
+        features = pd.concat([features, pd.DataFrame(front_patterns, index=data.index)], axis=1)
 
         return features
 

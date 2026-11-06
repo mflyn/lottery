@@ -53,7 +53,8 @@ class TestEndToEndWorkflow(unittest.TestCase):
         # 假设开奖号码与推荐号码完全一致
         level, prize = self.calculator.check_prize(
             rec['front'] + rec['back'],
-            rec['front'] + rec['back']
+            rec['front'] + rec['back'],
+            floating_prizes={1: 5000000}
         )
         self.assertEqual(level, 1)
         self.assertTrue(prize > 0)

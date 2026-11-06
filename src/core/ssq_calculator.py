@@ -33,6 +33,7 @@ class SSQCalculator(BaseCalculator):
         (2, 1): [6, 5],        # 六等奖
         (1, 1): [6, 5],        # 六等奖
         (0, 1): [6, 5],        # 六等奖
+        (3, 0): [7, 5],        # 福运奖 (2026新规: 3+0 中5元)
     }
 
     def __init__(self, config_manager=None):
@@ -226,7 +227,7 @@ class SSQCalculator(BaseCalculator):
             一个字典，键是奖级，值是该奖级的注数。例如 {1: 0, 3: 2, 6: 10}
         """
         all_bets = self._generate_complex_combinations(red_numbers, blue_numbers)
-        prize_summary = {level: 0 for level in range(1, 7)} # 初始化奖级计数
+        prize_summary = {level: 0 for level in range(1, 8)} # 初始化奖级计数 (1-7)
 
         for bet in all_bets:
             level, _ = self.check_prize(bet, draw_numbers)
@@ -247,7 +248,7 @@ class SSQCalculator(BaseCalculator):
             一个字典，键是奖级，值是该奖级的注数。
         """
         all_bets = self._generate_dantuo_combinations(red_dan, red_tuo, blue_numbers)
-        prize_summary = {level: 0 for level in range(1, 7)} # 初始化奖级计数
+        prize_summary = {level: 0 for level in range(1, 8)} # 初始化奖级计数 (1-7)
 
         for bet in all_bets:
             level, _ = self.check_prize(bet, draw_numbers)

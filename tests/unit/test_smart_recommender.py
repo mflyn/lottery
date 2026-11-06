@@ -1,78 +1,90 @@
-import unittest
-import pandas as pd
+"""Real training and recommendation paths; no fictional analysis/model methods."""
+import random
 import numpy as np
-from unittest.mock import MagicMock
+import pandas as pd
+import pytest
+from sklearn.linear_model import Ridge
+from src.core.models import SSQNumber, DLTNumber
 from src.core.smart_recommender import SmartRecommender
 
-class TestSmartRecommender(unittest.TestCase):
-    def setUp(self):
-        self.recommender = SmartRecommender()
-        # mock 依赖，避免真实特征工程和模型
-        self.recommender.feature_engineer = MagicMock()
-        self.recommender.models = {
-            'rf': MagicMock(),
-            'gb': MagicMock(),
-            'mlp': MagicMock()
-        }
-        self.recommender.evaluator = MagicMock()  # 提前 mock，避免 NumberEvaluator 导入问题
-        self.recommender.scaler = MagicMock()
 
-    def test_analyze_historical_data(self):
-        df = pd.DataFrame({'num': [1,2,3,4,5]})
-        # mock 内部方法
-        self.recommender._get_hot_numbers = MagicMock(return_value=[1,2,3])
-        self.recommender._get_cold_numbers = MagicMock(return_value=[4,5])
-        self.recommender._find_patterns = MagicMock(return_value={'pattern': 1})
-        self.recommender._calculate_statistics = MagicMock(return_value={'mean': 3})
-        result = self.recommender.analyze_historical_data(df)
-        self.assertIn('hot_numbers', result)
-        self.assertIn('cold_numbers', result)
-        self.assertIn('patterns', result)
-        self.assertIn('statistics', result)
+@pytest.fixture
+def recommender():
+    instance = SmartRecommender()
+    # A real small regressor keeps boundary tests quick and deterministic.
+    instance.models = {'ridge': Ridge()}
+    return instance
 
-    def test_train_models(self):
-        X = np.random.rand(20, 3)
-        y = np.random.randint(0, 2, 20)
-        # mock scaler
-        self.recommender.scaler.fit_transform = MagicMock(return_value=X)
-        self.recommender.scaler.transform = MagicMock(return_value=X)
-        for m in self.recommender.models.values():
-            m.fit = MagicMock()
-            m.score = MagicMock(return_value=0.9)
-        result = self.recommender.train_models(X, y)
-        self.assertTrue(all('train_score' in v and 'test_score' in v for v in result.values()))
 
-    def test_generate_recommendations(self):
-        # mock特征工程
-        self.recommender.feature_engineer.generate_comprehensive_features = MagicMock(return_value=np.random.rand(5,3))
-        # mock候选生成
-        self.recommender._generate_candidates = MagicMock(return_value=[{'num': i} for i in range(10)])
-        # mock评分
-        self.recommender._score_candidates = MagicMock(return_value=[{'numbers': {'num': i}, 'score': 10-i, 'details': {}} for i in range(10)])
-        # mock多样性
-        self.recommender._optimize_diversity = MagicMock(side_effect=lambda x: x)
-        recs = self.recommender.generate_recommendations(pd.DataFrame({'a':[1,2,3]}), num_recommendations=3)
-        self.assertEqual(len(recs), 3)
-        self.assertTrue(all('numbers' in r and 'score' in r for r in recs))
+@pytest.fixture
+def history():
+    return pd.DataFrame({
+        'draw_date': pd.date_range('2024-01-01', periods=30),
+        'red_numbers': [sorted({(i + k) % 33 + 1 for k in [0, 1, 2, 10, 20, 30]}) for i in range(30)],
+        'blue_number': [(i % 16) + 1 for i in range(30)],
+    }, index=range(30, 60))
 
-    def test_score_candidates(self):
-        # mock evaluator
-        self.recommender.evaluator.evaluate_number = MagicMock(return_value={'total_score': 5, 'details': {}})
-        candidates = [{'num': 1}, {'num': 2}]
-        scored = self.recommender._score_candidates(candidates)
-        self.assertEqual(len(scored), 2)
-        self.assertTrue(all('score' in s for s in scored))
 
-    def test_optimize_diversity(self):
-        # 测试多样性优化逻辑
-        self.recommender._calculate_similarity = MagicMock(return_value=0.5)
-        candidates = [
-            {'numbers': [1,2,3]},
-            {'numbers': [4,5,6]},
-            {'numbers': [1,2,3]}  # 与第一个重复
-        ]
-        diverse = self.recommender._optimize_diversity(candidates)
-        self.assertTrue(len(diverse) >= 2)
+@pytest.mark.parametrize('as_array', [False, True])
+def test_train_models_accepts_numeric_frames_and_arrays(recommender, as_array):
+    X = pd.DataFrame({'first': np.arange(20), 'second': np.arange(20) % 3})
+    y = pd.Series(np.arange(20) * 0.5)
+    scores = recommender.train_models(X.to_numpy() if as_array else X, y.to_numpy() if as_array else y)
+    assert set(scores) == {'ridge'}
+    assert np.isfinite(list(scores['ridge'].values())).all()
+    prediction = recommender.models['ridge'].predict(recommender.scaler.transform(X.tail(1).to_numpy() if as_array else X.tail(1)))
+    assert prediction.shape == (1,)
 
-if __name__ == '__main__':
-    unittest.main() 
+
+@pytest.mark.parametrize('lottery_type', ['ssq', 'dlt'])
+def test_generate_recommendations_with_real_features(recommender, history, lottery_type):
+    if lottery_type == 'dlt':
+        history = history.drop(columns=['red_numbers', 'blue_number']).assign(
+            front_numbers=[list(range(i % 20 + 1, i % 20 + 6)) for i in range(30)],
+            back_numbers=[[i % 11 + 1, i % 11 + 2] for i in range(30)])
+    state = random.getstate()
+    random.seed(42)
+    try:
+        recommendations = recommender.generate_recommendations(history, num_recommendations=3)
+    finally:
+        random.setstate(state)
+    assert len(recommendations) == 3
+    for rec in recommendations:
+        number = SSQNumber(**rec['numbers']) if lottery_type == 'ssq' else DLTNumber(**rec['numbers'])
+        assert number.validate()
+        assert np.isfinite(rec['score'])
+
+
+def test_candidates_use_latest_draw_and_history_is_sorted(recommender, history, monkeypatch):
+    captured = []
+    generate = recommender._generate_candidates
+    def capture(features, count):
+        captured.append(features.copy())
+        return generate(features, count)
+    monkeypatch.setattr(recommender, '_generate_candidates', capture)
+    recommender.generate_recommendations(history.iloc[::-1], num_recommendations=1)
+    assert captured[0].index.tolist() == [59]
+
+
+def test_unknown_history_type_is_rejected(recommender):
+    with pytest.raises(ValueError):
+        recommender.generate_recommendations(pd.DataFrame({'a': [1, 2, 3]}))
+
+
+def test_insufficient_history_is_rejected(recommender, history):
+    with pytest.raises(ValueError):
+        recommender.generate_recommendations(history.iloc[:2])
+
+
+def test_diversity_removes_repeated_candidates(recommender):
+    first = {'numbers': {'red': [1, 2, 3, 4, 5, 6], 'blue': 1}, 'score': 2}
+    second = {'numbers': {'red': [20, 21, 22, 23, 24, 25], 'blue': 2}, 'score': 1}
+    assert recommender._optimize_diversity([first, first, second]) == [first, second]
+
+
+def test_training_aligns_a_reordered_series_target(recommender):
+    data = pd.DataFrame({'signal': np.arange(20)}, index=range(20, 40))
+    target = pd.Series(np.arange(20) * 0.5, index=data.index).iloc[::-1]
+    recommender.train_models(data, target)
+    prediction = recommender.models['ridge'].predict(recommender.scaler.transform(data.tail(1)))[0]
+    assert prediction == pytest.approx(9.5, abs=0.5)

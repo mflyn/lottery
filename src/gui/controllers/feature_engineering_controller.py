@@ -46,8 +46,16 @@ class FeatureEngineeringController:
             if not self.feature_engineering:
                 raise ValueError("请先初始化特征工程控制器")
                 
-            result = self.feature_engineering.generate_features(periods)
-            self._notify_feature_generated(result)
+            result = self.feature_engineering.generate_features_from_history(periods)
+            raw_data = self.feature_engineering.raw_data.copy()
+            if 'blue_number' in raw_data.columns and 'blue' not in raw_data.columns:
+                raw_data['blue'] = raw_data['blue_number']
+            # The existing view consumes a structured payload; core APIs return DataFrames.
+            self._notify_feature_generated({
+                'raw_features': result,
+                'normalized_features': self.feature_engineering._normalize_features(result.astype(float)),
+                'raw_data': raw_data,
+            })
             return result
         except Exception as e:
             self._notify_error(f"生成特征失败: {str(e)}")

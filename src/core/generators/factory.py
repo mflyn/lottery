@@ -2,6 +2,7 @@ from typing import Dict, Type, List, Optional
 from .base import NumberGenerator
 from .random_generator import RandomGenerator
 from .smart_generator import SmartNumberGenerator
+from .fusion.sampler import MaximumEntropyFusionGenerator
 from ..exceptions import GeneratorError
 from ..logging_config import get_logger
 
@@ -12,7 +13,8 @@ class GeneratorFactory:
         self.logger = get_logger(__name__)
         self._generators: Dict[str, Type[NumberGenerator]] = {
             'random': RandomGenerator,
-            'smart': SmartNumberGenerator
+            'smart': SmartNumberGenerator,
+            'fusion': MaximumEntropyFusionGenerator
         }
     
     def create_generator(self, generator_type: str, lottery_type: str, **kwargs) -> NumberGenerator:

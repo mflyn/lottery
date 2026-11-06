@@ -1,198 +1,115 @@
-import unittest
-import pandas as pd
+"""Current DataFrame feature API, exercised without processor mocks."""
 import numpy as np
-from unittest.mock import MagicMock, patch
+import pandas as pd
+import pytest
 from src.core.features.feature_engineering import FeatureEngineering
-from src.core.features.feature_processor import FeatureProcessor
 
-class TestFeatureEngineering(unittest.TestCase):
-    """特征工程模块单元测试"""
-    
-    def setUp(self):
-        """测试前准备"""
-        # 创建测试数据
-        self.test_data = pd.DataFrame({
-            'date': pd.date_range(start='2020-01-01', periods=20),
-            'red_numbers': [[1, 5, 10, 15, 20, 25]] * 20,
-            'blue': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            'red_sum': [76] * 20,
-            'blue_number': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        })
-        
-        # 创建模拟对象
-        self.mock_processor = MagicMock(spec=FeatureProcessor)
-        self.mock_processor.extract_basic_features.return_value = pd.DataFrame({
-            'basic_feature1': range(20),
-            'basic_feature2': range(20, 40)
-        })
-        self.mock_processor.extract_advanced_features.return_value = pd.DataFrame({
-            'advanced_feature1': range(40, 60),
-            'advanced_feature2': range(60, 80)
-        })
-        self.mock_processor.normalize_features.return_value = pd.DataFrame({
-            'norm_feature1': np.random.random(20),
-            'norm_feature2': np.random.random(20)
-        })
-        self.mock_processor.calculate_feature_importance.return_value = {
-            'norm_feature1': 0.7,
-            'norm_feature2': 0.3
-        }
-        self.mock_processor.feature_importance = {
-            'norm_feature1': 0.7,
-            'norm_feature2': 0.3
-        }
-        
-        # 创建模拟数据管理器
-        self.mock_data_manager = MagicMock()
-        self.mock_data_manager.get_history_data.return_value = self.test_data
-        
-    def test_init(self):
-        """测试初始化"""
-        # 测试有效的彩票类型
-        fe = FeatureEngineering('ssq')
-        self.assertEqual(fe.lottery_type, 'ssq')
-        self.assertIsNotNone(fe.processor)
-        
-        # 测试无效的彩票类型
-        fe = FeatureEngineering('invalid')
-        self.assertEqual(fe.lottery_type, 'invalid')
-        self.assertIsNone(fe.processor)
-        
-        # 测试不指定彩票类型
-        fe = FeatureEngineering()
-        self.assertIsNone(fe.lottery_type)
-        self.assertIsNone(fe.processor)
-        
-    @patch('src.core.features.feature_engineering.SSQFeatureProcessor')
-    @patch('src.core.features.feature_engineering.LotteryDataManager')
-    def test_generate_features(self, mock_data_manager_class, mock_processor_class):
-        """测试生成特征"""
-        # 设置模拟对象
-        mock_processor_class.return_value = self.mock_processor
-        mock_data_manager_class.return_value = self.mock_data_manager
-        
-        # 创建特征工程对象
-        fe = FeatureEngineering('ssq')
-        
-        # 测试生成特征
-        result = fe.generate_features(100)
-        
-        # 验证结果
-        self.assertIn('raw_features', result)
-        self.assertIn('normalized_features', result)
-        self.assertIn('feature_importance', result)
-        self.assertIn('basic_features', result)
-        self.assertIn('advanced_features', result)
-        
-        # 验证调用
-        self.mock_data_manager.get_history_data.assert_called_once_with('ssq', 100)
-        self.mock_processor.extract_basic_features.assert_called_once()
-        self.mock_processor.extract_advanced_features.assert_called_once()
-        self.mock_processor.normalize_features.assert_called_once()
-        self.mock_processor.calculate_feature_importance.assert_called_once()
-        
-    def test_generate_features_no_processor(self):
-        """测试没有处理器时生成特征"""
-        fe = FeatureEngineering()
-        
-        # 应该抛出异常
-        with self.assertRaises(ValueError):
-            fe.generate_features()
-            
-    def test_get_feature_importance_report(self):
-        """测试获取特征重要性报告"""
-        # 设置模拟对象
-        fe = FeatureEngineering('ssq')
-        fe.processor = self.mock_processor
-        
-        # 测试获取报告
-        report = fe.get_feature_importance_report()
-        
-        # 验证结果
-        self.assertIsInstance(report, pd.DataFrame)
-        self.assertEqual(len(report), 2)  # 两个特征
-        self.assertIn('feature', report.columns)
-        self.assertIn('importance', report.columns)
-        self.assertIn('importance_normalized', report.columns)
-        self.assertIn('cumulative_importance', report.columns)
-        
-    def test_extract_temporal_features(self):
-        """测试提取时间序列特征"""
-        fe = FeatureEngineering()
-        
-        # 测试提取特征
-        features = fe._extract_temporal_features(self.test_data)
-        
-        # 验证结果
-        self.assertIsInstance(features, pd.DataFrame)
-        self.assertIn('day_of_week', features.columns)
-        self.assertIn('month', features.columns)
-        self.assertIn('season', features.columns)
-        
-        # 测试滞后特征
-        for lag in [1, 3, 5, 7, 14]:
-            self.assertIn(f'red_sum_lag_{lag}', features.columns)
-            self.assertIn(f'blue_lag_{lag}', features.columns)
-            
-        # 测试滚动统计
-        for window in [5, 10, 20]:
-            self.assertIn(f'red_mean_{window}', features.columns)
-            self.assertIn(f'red_std_{window}', features.columns)
-            
-    def test_extract_combination_features(self):
-        """测试提取组合特征"""
-        fe = FeatureEngineering()
-        
-        # 测试提取特征
-        features = fe._extract_combination_features(self.test_data)
-        
-        # 验证结果
-        self.assertIsInstance(features, pd.DataFrame)
-        self.assertIn('consecutive_pairs', features.columns)
-        self.assertIn('number_span', features.columns)
-        self.assertIn('sum_digits', features.columns)
-        
-        # 验证区间分布
-        self.assertIn('zone_1_11', features.columns)
-        self.assertIn('zone_12_22', features.columns)
-        self.assertIn('zone_23_33', features.columns)
-        
-    def test_extract_statistical_features(self):
-        """测试提取统计特征"""
-        fe = FeatureEngineering()
-        
-        # 测试提取特征
-        features = fe._extract_statistical_features(self.test_data)
-        
-        # 验证结果
-        self.assertIsInstance(features, pd.DataFrame)
-        self.assertIn('mean', features.columns)
-        self.assertIn('std', features.columns)
-        self.assertIn('median', features.columns)
-        self.assertIn('skewness', features.columns)
-        self.assertIn('kurtosis', features.columns)
-        
-    def test_select_features(self):
-        """测试特征选择"""
-        fe = FeatureEngineering()
-        
-        # 创建测试数据
-        features_df = pd.DataFrame({
-            'feature1': np.random.random(20),
-            'feature2': np.random.random(20),
-            'feature3': np.random.random(20),
-            'feature4': np.random.random(20),
-            'feature5': np.random.random(20)
-        })
-        target = pd.Series(np.random.randint(0, 2, 20))
-        
-        # 测试特征选择
-        with patch('src.core.features.feature_engineering.SelectKBest'):
-            selected = fe.select_features(features_df, target, k=3)
-            
-            # 验证结果
-            self.assertIsInstance(selected, pd.DataFrame)
-            self.assertIsInstance(fe.feature_scores, dict)
 
-if __name__ == '__main__':
-    unittest.main()
+@pytest.fixture
+def history():
+    return pd.DataFrame({
+        'draw_date': pd.date_range('2024-01-01', periods=10),
+        'red_numbers': [[1, 2, 3, 10, 20, 30]] * 10,
+        'blue_number': [3] * 10,
+    }, index=range(10, 20))
+
+
+@pytest.fixture
+def engineer(tmp_path):
+    return FeatureEngineering('ssq', data_path=str(tmp_path))
+
+
+@pytest.mark.parametrize('blue_column', ['blue_number', 'blue', 'blue_1', 'blue_numbers'])
+def test_blue_aliases_and_list_input(engineer, history, blue_column):
+    data = history.rename(columns={'blue_number': blue_column})
+    if blue_column == 'blue_numbers':
+        data[blue_column] = [[3]] * len(data)
+    features = engineer.generate_features(data)
+    assert features.index.equals(history.index)
+    assert features['red_sum'].tolist() == [66] * 10
+    assert features['red_consecutive_count'].tolist() == [2] * 10
+    assert features['blue_is_prime'].all()
+    assert features['blue_is_odd'].all()
+    assert np.isfinite(features.to_numpy(dtype=float)).all()
+
+
+def test_derived_columns_do_not_change_ball_statistics(engineer, history):
+    clean = engineer.generate_features(history)
+    changed = history.assign(red_sum=999, red_mean=500, red_odd_count=20)
+    pd.testing.assert_frame_equal(engineer.generate_features(changed), clean)
+
+
+def test_short_windows_are_finite_and_do_not_use_future_draws(engineer, history):
+    history.at[11, 'red_numbers'] = [4, 5, 6, 11, 21, 31]
+    before = engineer.generate_features(history.iloc[:2])
+    after = engineer.generate_features(history)
+    pd.testing.assert_frame_equal(before, after.loc[before.index])
+    assert before['number_frequency_ma7'].tolist() == [1.0, 2.5]
+    assert before['gap_days'].tolist() == [0.0, 1.0]
+    assert np.isfinite(before.to_numpy(dtype=float)).all()
+
+
+def test_features_preserve_input_and_index(engineer, history):
+    original = history.copy(deep=True)
+    features = engineer.generate_features(history)
+    pd.testing.assert_frame_equal(history, original)
+    assert features.index.tolist() == list(range(10, 20))
+
+
+@pytest.mark.parametrize('bad_data', [None, pd.DataFrame(), pd.DataFrame({'unrelated': [1]}), 100])
+def test_invalid_feature_input_is_rejected(engineer, bad_data):
+    with pytest.raises(ValueError):
+        engineer.generate_features(bad_data)
+
+
+def test_no_lottery_processor_is_rejected(tmp_path, history):
+    with pytest.raises(ValueError):
+        FeatureEngineering(data_path=str(tmp_path)).generate_features(history)
+
+
+@pytest.mark.parametrize('method', ['mutual_info', 'f_regression', 'correlation'])
+def test_real_feature_selection_preserves_index(engineer, method):
+    data = pd.DataFrame({'signal': np.arange(20), 'noise': np.tile([0, 1], 10)}, index=range(20, 40))
+    target = pd.Series(np.arange(20), index=data.index)
+    selected = engineer.select_features(data, target, method=method, n_features=1)
+    assert selected.columns.tolist() == ['signal']
+    assert selected.index.equals(data.index)
+    assert engineer.feature_scores['signal'] > 0
+
+
+def test_importance_handles_constant_features(engineer):
+    data = pd.DataFrame({'constant': [1] * 10, 'signal': range(10)})
+    with np.errstate(invalid='raise', divide='raise'):
+        scores = engineer.analyze_feature_importance(data, pd.Series(range(10)))
+    assert all(np.isfinite(score) for score in scores.values())
+    assert scores['signal'] > scores['constant']
+
+
+def test_history_features_use_configured_data_directory(tmp_path, monkeypatch):
+    import json
+    from src.core.config_manager import get_config_manager
+    monkeypatch.setattr(get_config_manager(), 'get_data_path', lambda: str(tmp_path))
+    rows = [{'draw_num': f'202400{i+1}', 'draw_date': f'2024-01-0{i+1}',
+             'red_numbers': [1, 2, 3, 10, 20, 30], 'blue_number': 3,
+             'sales': 0, 'prize_pool': 0} for i in range(3)]
+    (tmp_path / 'ssq_history.json').write_text(json.dumps({'data': rows}))
+    engineer = FeatureEngineering('ssq')
+    features = engineer.generate_features_from_history(periods=2)
+    assert engineer.data_manager.data_path == tmp_path
+    assert features['red_sum'].tolist() == [66, 66]
+
+
+def test_series_targets_are_aligned_by_label(engineer):
+    data = pd.DataFrame({'signal': [1, 2, 3, 4, 5, 6], 'noise': [6, 1, 5, 2, 4, 3]}, index=list('abcdef'))
+    target = pd.Series([1, 2, 3, 4, 5, 6], index=list('abcdef'))
+    ordered = engineer.analyze_feature_importance(data, target)
+    shuffled = target.loc[list('faebdc')]
+    assert engineer.select_features(data, shuffled, 'correlation', 1).columns.tolist() == ['signal']
+    assert engineer.analyze_feature_importance(data, shuffled) == pytest.approx(ordered)
+
+
+@pytest.mark.parametrize('method', ['correlation', 'mutual_info', 'f_regression'])
+def test_mismatched_target_labels_are_rejected(engineer, method):
+    data = pd.DataFrame({'signal': range(6)}, index=list('abcdef'))
+    with pytest.raises(ValueError):
+        engineer.select_features(data, pd.Series(range(6), index=list('abcdeg')), method, 1)

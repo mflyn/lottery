@@ -600,24 +600,33 @@ class DLTHistoryFrame:
         """格式化数字为带逗号的字符串"""
         return "{:,}".format(number)
         
+    def _update_ui_after_fetch(self, data):
+        """在主线程中更新UI"""
+        self.current_data = data['items']
+        self.total_pages = data['total_pages']
+
+        # 更新表格
+        self.update_table()
+        # 更新分页信息
+        self.update_page_info()
+
     def refresh_data(self):
-        """刷新数据"""
-        from ..core.data_fetcher import DLTDataFetcher
-        fetcher = DLTDataFetcher()
-        
-        try:
-            # 获取数据
-            data = fetcher.fetch_history(page=self.page, page_size=self.page_size)
-            self.current_data = data['items']
-            self.total_pages = data['total_pages']
-            
-            # 更新表格
-            self.update_table()
-            # 更新分页信息
-            self.update_page_info()
-            
-        except Exception as e:
-            messagebox.showerror("错误", f"获取数据失败: {str(e)}")
+        """刷新数据 (多线程版本)"""
+        def _fetch_thread():
+            try:
+                from ..core.data_fetcher import DLTDataFetcher
+                fetcher = DLTDataFetcher()
+                # 获取数据
+                data = fetcher.fetch_history(page=self.page, page_size=self.page_size)
+
+                # 在主线程更新UI
+                self.parent.after(0, lambda: self._update_ui_after_fetch(data))
+
+            except Exception as e:
+                self.parent.after(0, lambda: messagebox.showerror("错误", f"获取数据失败: {str(e)}"))
+
+        import threading
+        threading.Thread(target=_fetch_thread, daemon=True).start()
             
     def update_table(self):
         """更新表格数据"""

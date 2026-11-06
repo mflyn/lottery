@@ -6,6 +6,7 @@ import matplotlib
 matplotlib.use('TkAgg') # 明确指定 backend，有时有助于避免冲突
 import matplotlib.pyplot as plt # 恢复 pyplot 导入
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg # 恢复 canvas 导入
+from matplotlib.figure import Figure
 import threading # <--- 导入 threading
 import queue     # <--- 导入 queue
 import json
@@ -63,10 +64,10 @@ def parse_numbers(entry_widget) -> List[int]:
 
 class SSQFrame(ttk.Frame):
     """双色球功能框架"""
-    def __init__(self, master):
+    def __init__(self, master, data_manager=None):
         super().__init__(master, padding="10")
         self.calculator = SSQCalculator()
-        self.data_manager = LotteryDataManager("data")
+        self.data_manager = data_manager if data_manager is not None else LotteryDataManager("data")
         self._create_widgets()
 
     def _create_widgets(self):
@@ -186,79 +187,81 @@ class SSQFrame(ttk.Frame):
             messagebox.showerror("计算错误", str(e))
             self.bet_result_label.config(text="投注结果: 计算错误")
 
+    def _update_ui_after_fetch(self, issue=None, numbers_str=None, error_msg=None, warning_msg=None, info_msg=None):
+        """在主线程中更新UI"""
+        if error_msg:
+            messagebox.showerror("更新失败", error_msg)
+        if warning_msg:
+            messagebox.showwarning("提示", warning_msg)
+        if info_msg:
+            messagebox.showinfo("查询结果", info_msg)
+
+        if issue is not None:
+            self.check_issue_entry.delete(0, tk.END)
+            self.check_issue_entry.insert(0, str(issue))
+        if numbers_str is not None:
+            self.draw_entry.delete(0, tk.END)
+            self.draw_entry.insert(0, numbers_str)
+
+        self.fetch_button.config(text="获取开奖号", state=tk.NORMAL)
+
     def fetch_draw_numbers(self):
-        """根据输入的期号获取开奖号码并填充，如果期号为空则获取最新一期"""
+        """根据输入的期号获取开奖号码并填充，如果期号为空则获取最新一期 (多线程版本)"""
         issue = self.check_issue_entry.get().strip()
-        lottery_type = 'ssq' # Hardcoded for SSQFrame
+        lottery_type = 'ssq'
 
         self.fetch_button.config(text="查询中...", state=tk.DISABLED)
-        self.master.update_idletasks()
 
-        try:
-            # 情况1：未输入期号，获取最新一期
-            if not issue:
-                print("未输入期号，尝试获取最新数据...")
-                update_success = self.data_manager.update_data(lottery_type)
-                if update_success:
-                    print("在线更新成功，获取最新一期数据...")
-                    latest_data_df = self.data_manager.get_history_data(lottery_type, periods=1)
-                    if not latest_data_df.empty:
-                        latest_issue_data = latest_data_df.iloc[0].to_dict()
-                        # 提取期号和号码
-                        latest_issue = latest_issue_data.get('draw_num')
-                        red_nums = latest_issue_data.get('red_numbers', [])
-                        blue_num = latest_issue_data.get('blue_number', None)
-                        if latest_issue and red_nums and blue_num is not None:
-                            numbers_str = ",".join(map(str, sorted(red_nums))) + "," + str(blue_num)
-                            numbers_str_display = numbers_str.replace(',', ' ')
-
-                            self.check_issue_entry.delete(0, tk.END)
-                            self.check_issue_entry.insert(0, str(latest_issue))
-                            self.draw_entry.delete(0, tk.END)
-                            self.draw_entry.insert(0, numbers_str_display)
-                        else:
-                             messagebox.showwarning("获取失败", "获取到最新数据，但数据格式不完整。")
-                    else:
-                        messagebox.showwarning("无数据", "无法获取最新一期开奖数据。")
-                else:
-                    messagebox.showerror("更新失败", f"无法从官网获取 {self.data_manager.LOTTERY_TYPES[lottery_type]} 最新数据，请检查网络或稍后再试。")
-
-            # 情况2：输入了期号，按原逻辑查找
-            else:
-                print(f"查询期号 {issue}...")
-                # 1. 先查本地
-                issue_data = self.data_manager.get_issue_data(lottery_type, issue)
-
-                if issue_data and 'numbers' in issue_data:
-                    # 本地找到
-                    numbers_str = issue_data['numbers'].replace(',', ' ')
-                    self.draw_entry.delete(0, tk.END)
-                    self.draw_entry.insert(0, numbers_str)
-                else:
-                    # 2. 本地未找到，尝试在线更新 (移除提示框)
-                    print(f"本地未找到期号 {issue}，尝试在线更新...")
+        def _fetch_thread():
+            try:
+                # 情况1：未输入期号，获取最新一期
+                if not issue:
+                    print("未输入期号，尝试获取最新数据...")
                     update_success = self.data_manager.update_data(lottery_type)
                     if update_success:
-                        print("在线更新成功，再次查询本地数据...")
-                        # 3. 再次查询本地
-                        issue_data_after_update = self.data_manager.get_issue_data(lottery_type, issue)
-                        if issue_data_after_update and 'numbers' in issue_data_after_update:
-                            numbers_str = issue_data_after_update['numbers'].replace(',', ' ')
-                            self.draw_entry.delete(0, tk.END)
-                            self.draw_entry.insert(0, numbers_str)
+                        print("在线更新成功，获取最新一期数据...")
+                        latest_data_df = self.data_manager.get_history_data(lottery_type, periods=1)
+                        if not latest_data_df.empty:
+                            latest_issue_data = latest_data_df.iloc[0].to_dict()
+                            latest_issue = latest_issue_data.get('draw_num')
+                            red_nums = latest_issue_data.get('red_numbers', [])
+                            blue_num = latest_issue_data.get('blue_number', None)
+                            if latest_issue and red_nums and blue_num is not None:
+                                numbers_str = ",".join(map(str, sorted(red_nums))) + "," + str(blue_num)
+                                numbers_str_display = numbers_str.replace(',', ' ')
+                                self.master.after(0, lambda: self._update_ui_after_fetch(issue=latest_issue, numbers_str=numbers_str_display))
+                            else:
+                                self.master.after(0, lambda: self._update_ui_after_fetch(warning_msg="获取到最新数据，但数据格式不完整。"))
                         else:
-                            # 4. 更新后仍未找到
-                            print(f"更新后仍未找到期号 {issue}")
-                            messagebox.showwarning("未找到", f"未能从近期官网数据中找到期号 {issue}。\n可能期号过旧或不存在。")
+                            self.master.after(0, lambda: self._update_ui_after_fetch(warning_msg="无法获取最新一期开奖数据。"))
                     else:
-                        # 更新失败
-                        print("在线更新失败")
-                        messagebox.showerror("更新失败", f"无法从官网获取 {self.data_manager.LOTTERY_TYPES[lottery_type]} 最新数据，请检查网络或稍后再试。")
+                        self.master.after(0, lambda: self._update_ui_after_fetch(error_msg=f"无法从官网获取 {self.data_manager.LOTTERY_TYPES[lottery_type]} 最新数据，请检查网络或稍后再试。"))
 
-        except Exception as e:
-             messagebox.showerror("查询错误", f"获取开奖号时发生错误: {str(e)}")
-        finally:
-             self.fetch_button.config(text="获取开奖号", state=tk.NORMAL)
+                # 情况2：输入了期号，按原逻辑查找
+                else:
+                    print(f"查询期号 {issue}...")
+                    issue_data = self.data_manager.get_issue_data(lottery_type, issue)
+                    if issue_data and 'numbers' in issue_data:
+                        numbers_str = issue_data['numbers'].replace(',', ' ')
+                        self.master.after(0, lambda: self._update_ui_after_fetch(numbers_str=numbers_str))
+                    else:
+                        print(f"本地未找到期号 {issue}，尝试在线更新...")
+                        update_success = self.data_manager.update_data(lottery_type)
+                        if update_success:
+                            print("在线更新成功，再次查询本地数据...")
+                            issue_data_after_update = self.data_manager.get_issue_data(lottery_type, issue)
+                            if issue_data_after_update and 'numbers' in issue_data_after_update:
+                                numbers_str = issue_data_after_update['numbers'].replace(',', ' ')
+                                self.master.after(0, lambda: self._update_ui_after_fetch(numbers_str=numbers_str))
+                            else:
+                                self.master.after(0, lambda: self._update_ui_after_fetch(warning_msg=f"未能从近期官网数据中找到期号 {issue}。\n可能期号过旧或不存在。"))
+                        else:
+                            self.master.after(0, lambda: self._update_ui_after_fetch(error_msg=f"无法从官网获取 {self.data_manager.LOTTERY_TYPES[lottery_type]} 最新数据，请检查网络或稍后再试。"))
+            except Exception as e:
+                self.master.after(0, lambda: self._update_ui_after_fetch(error_msg=f"获取开奖号码时发生错误: {str(e)}"))
+
+        threading.Thread(target=_fetch_thread, daemon=True).start()
+
 
     def check_prize(self):
         # --- 修改：不再使用 parse_numbers 解析开奖号 --- >
@@ -316,7 +319,7 @@ class SSQFrame(ttk.Frame):
                 # 如果是刚好 6 红 1 蓝，按单式处理 (调用旧方法，但返回格式统一)
                 if len(bet_red) == 6 and len(bet_blue) == 1:
                     level, amount = self.calculator.check_prize(bet_red + bet_blue, draw_numbers)
-                    prize_summary = {lvl: (1 if lvl == level else 0) for lvl in range(1, 7)}
+                    prize_summary = {lvl: (1 if lvl == level else 0) for lvl in range(1, 8)}
                     check_type = "单式"
                 # 否则按复式处理
                 else:
@@ -333,7 +336,7 @@ class SSQFrame(ttk.Frame):
                 if total_wins > 0:
                     result_lines = [f"{check_type}中奖结果:"]
                     total_amount = 0
-                    for level in range(1, 7):
+                    for level in range(1, 8):
                         count = prize_summary.get(level, 0)
                         if count > 0:
                             # 从 PRIZE_LEVELS 获取单注奖金用于估算总额
@@ -342,6 +345,8 @@ class SSQFrame(ttk.Frame):
                             # Let's find the first key that matches the level for approximate prize amount
                             level_prize = 0
                             level_desc = f"{level}等奖"
+                            if level == 7:
+                                level_desc = "福运奖"
                             for (r, b), info in self.calculator.PRIZE_LEVELS.items():
                                 if info[0] == level:
                                      level_prize = info[1]
@@ -367,14 +372,12 @@ class SSQFrame(ttk.Frame):
 
 class DLTFrame(ttk.Frame):
     """大乐透功能框架"""
-    def __init__(self, master):
+    def __init__(self, master, data_manager=None):
         super().__init__(master, padding="10")
         self.calculator = DLTCalculator()
-        # 假设 DataManager 实例可以通过某种方式访问，或者在这里也创建一个
-        # 最简单的方式是每个 Frame 都创建一个，或者通过主 App 传递
-        # 最简单的方式是每个 Frame 都创建一个，或者通过主 App 传递
-        self.data_manager = LotteryDataManager("data")
+        self.data_manager = data_manager if data_manager is not None else LotteryDataManager("data")
         self.additional_bet = tk.BooleanVar(value=False)
+        self.current_prize_pool = 0.0 # 记录当前奖池
         self._create_widgets()
 
     def _create_widgets(self):
@@ -519,81 +522,93 @@ class DLTFrame(ttk.Frame):
             messagebox.showerror("计算错误", str(e))
             self.bet_result_label.config(text="投注结果: 计算错误")
 
+    def _update_ui_after_fetch(self, issue=None, numbers_str=None, prize_pool=None, error_msg=None, warning_msg=None, info_msg=None):
+        """在主线程中更新UI"""
+        if error_msg:
+            messagebox.showerror("更新失败", error_msg)
+        if warning_msg:
+            messagebox.showwarning("未找到", warning_msg)
+        if info_msg:
+            messagebox.showinfo("查询结果", info_msg)
+
+        if issue is not None:
+            self.check_issue_entry.delete(0, tk.END)
+            self.check_issue_entry.insert(0, str(issue))
+        if numbers_str is not None:
+            self.draw_entry.delete(0, tk.END)
+            self.draw_entry.insert(0, numbers_str)
+        if prize_pool is not None:
+            self.current_prize_pool = prize_pool
+
+        self.fetch_button.config(text="获取开奖号", state=tk.NORMAL)
+
     def fetch_draw_numbers(self):
-        """根据输入的期号获取开奖号码并填充，如果期号为空则获取最新一期"""
+        """根据输入的期号获取开奖号码并填充，如果期号为空则获取最新一期 (多线程版本)"""
         issue = self.check_issue_entry.get().strip()
-        lottery_type = 'dlt' # Hardcoded for DLTFrame
+        lottery_type = 'dlt'
 
         self.fetch_button.config(text="查询中...", state=tk.DISABLED)
-        self.master.update_idletasks()
 
-        try:
-            # 情况1：未输入期号，获取最新一期
-            if not issue:
-                print("未输入期号，尝试获取最新数据...")
-                update_success = self.data_manager.update_data(lottery_type)
-                if update_success:
-                    print("在线更新成功，获取最新一期数据...")
-                    latest_data_df = self.data_manager.get_history_data(lottery_type, periods=1)
-                    if not latest_data_df.empty:
-                        latest_issue_data = latest_data_df.iloc[0].to_dict()
-                        # 提取期号和号码
-                        latest_issue = latest_issue_data.get('draw_num')
-                        front_nums = latest_issue_data.get('front_numbers', [])
-                        back_nums = latest_issue_data.get('back_numbers', [])
-                        if latest_issue and front_nums and back_nums:
-                            numbers_str = (",".join(map(str, sorted(front_nums))) +
-                                           "," +
-                                           ",".join(map(str, sorted(back_nums))))
-                            numbers_str_display = numbers_str.replace(',', ' ')
-
-                            self.check_issue_entry.delete(0, tk.END)
-                            self.check_issue_entry.insert(0, str(latest_issue))
-                            self.draw_entry.delete(0, tk.END)
-                            self.draw_entry.insert(0, numbers_str_display)
-                        else:
-                             messagebox.showwarning("获取失败", "获取到最新数据，但数据格式不完整。")
-                    else:
-                        messagebox.showwarning("无数据", "无法获取最新一期开奖数据。")
-                else:
-                    messagebox.showerror("更新失败", f"无法从官网获取 {self.data_manager.LOTTERY_TYPES[lottery_type]} 最新数据，请检查网络或稍后再试。")
-
-            # 情况2：输入了期号，按原逻辑查找
-            else:
-                print(f"查询期号 {issue}...")
-                # 1. 先查本地
-                issue_data = self.data_manager.get_issue_data(lottery_type, issue)
-
-                if issue_data and 'numbers' in issue_data:
-                    # 本地找到
-                    numbers_str = issue_data['numbers'].replace(',', ' ')
-                    self.draw_entry.delete(0, tk.END)
-                    self.draw_entry.insert(0, numbers_str)
-                else:
-                    # 2. 本地未找到，尝试在线更新 (移除提示框)
-                    print(f"本地未找到期号 {issue}，尝试在线更新...")
+        def _fetch_thread():
+            try:
+                # 情况1：未输入期号，获取最新一期
+                if not issue:
+                    print("未输入期号，尝试获取最新数据...")
                     update_success = self.data_manager.update_data(lottery_type)
                     if update_success:
-                        print("在线更新成功，再次查询本地数据...")
-                        # 3. 再次查询本地
-                        issue_data_after_update = self.data_manager.get_issue_data(lottery_type, issue)
-                        if issue_data_after_update and 'numbers' in issue_data_after_update:
-                            numbers_str = issue_data_after_update['numbers'].replace(',', ' ')
-                            self.draw_entry.delete(0, tk.END)
-                            self.draw_entry.insert(0, numbers_str)
-                        else:
-                            # 4. 更新后仍未找到
-                            print(f"更新后仍未找到期号 {issue}")
-                            messagebox.showwarning("未找到", f"未能从近期官网数据中找到期号 {issue}。\n可能期号过旧或不存在。")
-                    else:
-                        # 更新失败
-                        print("在线更新失败")
-                        messagebox.showerror("更新失败", f"无法从官网获取 {self.data_manager.LOTTERY_TYPES[lottery_type]} 最新数据，请检查网络或稍后再试。")
+                        print("在线更新成功，获取最新一期数据...")
+                        latest_data_df = self.data_manager.get_history_data(lottery_type, periods=1)
+                        if not latest_data_df.empty:
+                            latest_issue_data = latest_data_df.iloc[0].to_dict()
+                            latest_issue = latest_issue_data.get('draw_num')
+                            front_nums = latest_issue_data.get('front_numbers', [])
+                            back_nums = latest_issue_data.get('back_numbers', [])
+                            prize_pool = float(latest_issue_data.get('prize_pool', 0))
 
-        except Exception as e:
-             messagebox.showerror("查询错误", f"获取开奖号时发生错误: {str(e)}")
-        finally:
-             self.fetch_button.config(text="获取开奖号", state=tk.NORMAL)
+                            if latest_issue and front_nums and back_nums:
+                                numbers_str = (",".join(map(str, sorted(front_nums))) +
+                                               "," +
+                                               ",".join(map(str, sorted(back_nums))))
+                                numbers_str_display = numbers_str.replace(',', ' ')
+                                self.master.after(0, lambda: self._update_ui_after_fetch(
+                                    issue=latest_issue,
+                                    numbers_str=numbers_str_display,
+                                    prize_pool=prize_pool
+                                ))
+                            else:
+                                self.master.after(0, lambda: self._update_ui_after_fetch(warning_msg="获取到最新数据，但数据格式不完整。"))
+                        else:
+                            self.master.after(0, lambda: self._update_ui_after_fetch(warning_msg="无法获取最新一期开奖数据。"))
+                    else:
+                        self.master.after(0, lambda: self._update_ui_after_fetch(error_msg=f"无法从官网获取 {self.data_manager.LOTTERY_TYPES[lottery_type]} 最新数据，请检查网络或稍后再试。"))
+
+                # 情况2：输入了期号，按原逻辑查找
+                else:
+                    print(f"查询期号 {issue}...")
+                    issue_data = self.data_manager.get_issue_data(lottery_type, issue)
+                    if issue_data and 'numbers' in issue_data:
+                        prize_pool = float(issue_data.get('prize_pool', 0))
+                        numbers_str = issue_data['numbers'].replace(',', ' ')
+                        self.master.after(0, lambda: self._update_ui_after_fetch(numbers_str=numbers_str, prize_pool=prize_pool))
+                    else:
+                        print(f"本地未找到期号 {issue}，尝试在线更新...")
+                        update_success = self.data_manager.update_data(lottery_type)
+                        if update_success:
+                            print("在线更新成功，再次查询本地数据...")
+                            issue_data_after_update = self.data_manager.get_issue_data(lottery_type, issue)
+                            if issue_data_after_update and 'numbers' in issue_data_after_update:
+                                prize_pool = float(issue_data_after_update.get('prize_pool', 0))
+                                numbers_str = issue_data_after_update['numbers'].replace(',', ' ')
+                                self.master.after(0, lambda: self._update_ui_after_fetch(numbers_str=numbers_str, prize_pool=prize_pool))
+                            else:
+                                self.master.after(0, lambda: self._update_ui_after_fetch(warning_msg=f"未能从近期官网数据中找到期号 {issue}。\n可能期号过旧或不存在。"))
+                        else:
+                            self.master.after(0, lambda: self._update_ui_after_fetch(error_msg=f"无法从官网获取 {self.data_manager.LOTTERY_TYPES[lottery_type]} 最新数据，请检查网络或稍后再试。"))
+            except Exception as e:
+                self.master.after(0, lambda: self._update_ui_after_fetch(error_msg=f"获取开奖号码时发生错误: {str(e)}"))
+
+        threading.Thread(target=_fetch_thread, daemon=True).start()
+
 
     def check_prize(self):
         # --- 修改：不再使用 parse_numbers 解析开奖号 --- >
@@ -627,6 +642,9 @@ class DLTFrame(ttk.Frame):
         check_type = "unknown"
 
         try:
+            issue = self.check_issue_entry.get().strip() or None
+            history = self.data_manager.get_history_data('dlt') if issue else None
+            context = self.calculator.get_draw_context(history, issue, draw_numbers)
             # 优先判断胆拖
             if (bet_front_dan or bet_front_tuo or bet_back_dan or bet_back_tuo):
                 # 胆拖时，所有胆拖相关输入框必须有合理的值 (或为空列表)
@@ -643,7 +661,7 @@ class DLTFrame(ttk.Frame):
                      return
 
                 prize_summary = self.calculator.check_dantuo_prize(
-                    bet_front_dan, bet_front_tuo, bet_back_dan, bet_back_tuo, draw_numbers, is_add
+                    bet_front_dan, bet_front_tuo, bet_back_dan, bet_back_tuo, draw_numbers, is_add, **context
                 )
                 check_type = "胆拖"
 
@@ -657,12 +675,13 @@ class DLTFrame(ttk.Frame):
 
                 # 如果是刚好 5 前 2 后，按单式处理
                 if len(bet_front) == 5 and len(bet_back) == 2:
-                    level, amount = self.calculator.check_prize(bet_front + bet_back, draw_numbers, is_add)
-                    prize_summary = {lvl: (1 if lvl == level else 0) for lvl in range(1, 10)}
+                    level, amount = self.calculator.check_prize(bet_front + bet_back, draw_numbers, is_add, **context)
+                    prize_summary = {entry[0]: (1 if entry[0] == level else 0)
+                                     for entry in self.calculator.get_prize_levels(issue).values()}
                     check_type = "单式"
                 # 否则按复式处理
                 else:
-                    prize_summary = self.calculator.check_complex_prize(bet_front, bet_back, draw_numbers, is_add)
+                    prize_summary = self.calculator.check_complex_prize(bet_front, bet_back, draw_numbers, is_add, **context)
                     print(f"--- Debug: check_complex_prize returned: {prize_summary} ---")
                     check_type = "复式"
             else:
@@ -673,22 +692,9 @@ class DLTFrame(ttk.Frame):
             if prize_summary:
                 total_wins = sum(prize_summary.values())
                 if total_wins > 0:
-                    result_lines = [f"{check_type}中奖结果 ({'追加' if is_add else '基本'}):"]
-                    total_amount = 0
-                    for level in range(1, 10):
-                        count = prize_summary.get(level, 0)
-                        if count > 0:
-                             # 从 PRIZE_LEVELS 获取单注奖金
-                            level_prize = 0
-                            level_desc = f"{level}等奖"
-                            for (f, b), info in self.calculator.PRIZE_LEVELS.items():
-                                if info[0] == level:
-                                     level_prize = info[1] + (info[2] if is_add else 0)
-                                     break
-                            result_lines.append(f"  - {level_desc}: {count} 注 x {level_prize} 元")
-                            total_amount += count * level_prize
-                    result_lines.append(f"总计: {total_wins} 注, 总奖金: {total_amount} 元")
-                    self.prize_result_label.config(text="\n".join(result_lines))
+                    result = self.calculator.format_prize_summary(
+                        prize_summary, check_type=check_type, is_additional=is_add, **context)
+                    self.prize_result_label.config(text=result)
                 else:
                     self.prize_result_label.config(text=f"{check_type}中奖结果 ({'追加' if is_add else '基本'}): 未中奖")
             else:
@@ -703,10 +709,10 @@ class DLTFrame(ttk.Frame):
 
 class DataAnalysisFrame(ttk.Frame):
     """数据分析功能框架"""
-    def __init__(self, master):
+    def __init__(self, master, data_manager=None):
         super().__init__(master, padding="10")
-        # 假设数据文件在项目根目录的 data/ 子目录下
-        self.data_manager = LotteryDataManager("data")
+        self.data_manager = data_manager if data_manager is not None else LotteryDataManager("data")
+        self._poll_id = None
         self.history_data = pd.DataFrame() # 用于存储加载的数据
         self.update_queue = queue.Queue() # <--- 创建用于线程通信的队列
         self.is_updating = False # <--- 添加状态标志
@@ -826,7 +832,9 @@ class DataAnalysisFrame(ttk.Frame):
         self.chart_frame.pack(fill=tk.BOTH, expand=True) # 初始扩展
 
         # 使用 Matplotlib 创建图表
-        self.fig, self.ax = plt.subplots(figsize=(5, 4), dpi=100) # 图表大小可以调整
+        # Embed one figure in this interpreter; pyplot.subplots creates another Tk window.
+        self.fig = Figure(figsize=(5, 4), dpi=100)
+        self.ax = self.fig.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.chart_frame)
         self.canvas_widget = self.canvas.get_tk_widget()
         self.canvas_widget.pack(fill=tk.BOTH, expand=True)
@@ -868,6 +876,7 @@ class DataAnalysisFrame(ttk.Frame):
 
     def _check_update_queue(self):
         """定期检查更新队列，处理后台线程的结果"""
+        self._poll_id = None
         try:
             message = self.update_queue.get_nowait() # 非阻塞获取
             success, lottery_type, error_msg = message
@@ -892,7 +901,14 @@ class DataAnalysisFrame(ttk.Frame):
              self._finalize_update_ui() # 出错也要恢复UI
 
         # 每隔 100ms 检查一次队列
-        self.master.after(100, self._check_update_queue)
+        if self.winfo_exists():
+            self._poll_id = self.after(100, self._check_update_queue)
+
+    def destroy(self):
+        if self._poll_id is not None:
+            self.after_cancel(self._poll_id)
+            self._poll_id = None
+        super().destroy()
 
     def set_evaluation_frame(self, evaluation_frame):
         """设置号码评价页面实例，用于数据更新联动"""
@@ -1495,6 +1511,18 @@ class DataAnalysisFrame(ttk.Frame):
 
         lines.append(f"热号Top: {format_top(hot_list)}")
         lines.append(f"冷号Top: {format_top(cold_list)}")
+
+        # 新增：显示所有号码的频率统计
+        if freq:
+            lines.append("全部号码统计:")
+            sorted_nums = sorted([int(k) if str(k).isdigit() else k for k in freq.keys()])
+            all_freq_lines = []
+            for i in range(0, len(sorted_nums), 8):
+                chunk = sorted_nums[i:i+8]
+                line_parts = [f"{n:02d}({freq.get(n, freq.get(str(n), 0))})" for n in chunk]
+                all_freq_lines.append("  " + " ".join(line_parts))
+            lines.extend(all_freq_lines)
+
         return lines
 
     def _set_result_text_height(self, height: int):
@@ -1751,29 +1779,29 @@ class DataAnalysisFrame(ttk.Frame):
                  self.ax.set_xticks(numbers)
                  self.ax.tick_params(axis='x', rotation=0, labelsize=10)
 
-            plt.tight_layout() # 调整布局防止标签重叠
+            self.fig.tight_layout() # 调整布局防止标签重叠
         except Exception as e:
              self.ax.text(0.5, 0.5, f'绘制图表时出错:\n{e}', horizontalalignment='center', verticalalignment='center', transform=self.ax.transAxes)
 
 class LotteryApp:
-    def __init__(self, master):
+    def __init__(self, master, data_path="data"):
         self.master = master
         master.title("彩票工具集")
-        master.geometry("800x600") # 增加窗口大小以容纳更多内容
+        self.data_manager = LotteryDataManager(data_path)
 
         # 创建 Notebook (选项卡控件)
         self.notebook = ttk.Notebook(master)
 
         # 创建并添加双色球选项卡
-        self.ssq_tab = SSQFrame(self.notebook)
+        self.ssq_tab = SSQFrame(self.notebook, self.data_manager)
         self.notebook.add(self.ssq_tab, text='双色球')
 
         # 创建并添加大乐透选项卡
-        self.dlt_tab = DLTFrame(self.notebook)
+        self.dlt_tab = DLTFrame(self.notebook, self.data_manager)
         self.notebook.add(self.dlt_tab, text='大乐透')
 
         # 创建并添加数据分析选项卡
-        self.analysis_tab = DataAnalysisFrame(self.notebook)
+        self.analysis_tab = DataAnalysisFrame(self.notebook, self.data_manager)
         self.notebook.add(self.analysis_tab, text='数据分析')
 
         # 添加号码评价标签页（先创建，便于号码推荐读取其评分设置）
@@ -1821,6 +1849,7 @@ class LotteryToolsGUI:
         self.root.title("彩票工具集")
         self.root.geometry("1000x700")
         self.root.minsize(800, 600)
+        self.root.protocol("WM_DELETE_WINDOW", self.quit)
 
         # macOS: 点击 Dock 图标时恢复窗口
         try:
@@ -1839,7 +1868,7 @@ class LotteryToolsGUI:
     def _create_application(self):
         """创建应用程序主界面"""
         # 使用现有的LotteryApp类
-        self.app = LotteryApp(self.root)
+        self.app = LotteryApp(self.root, self.data_path)
 
     def _on_reopen(self):
         """macOS Dock 重新打开时恢复窗口"""
@@ -1869,7 +1898,4 @@ class LotteryToolsGUI:
             pass
 
 if __name__ == "__main__":
-    # 保持原有的启动方式
-    root = tk.Tk()
-    app = LotteryApp(root)
-    root.mainloop()
+    LotteryToolsGUI().run()

@@ -1,117 +1,77 @@
-import unittest
-from unittest.mock import MagicMock
+"""Controller/core integration without a real Tk window."""
+import numpy as np
 import pandas as pd
+import pytest
 from src.gui.controllers.feature_engineering_controller import FeatureEngineeringController
 
-class TestFeatureEngineeringController(unittest.TestCase):
-    def setUp(self):
-        self.view = MagicMock()
-        self.model = MagicMock()
-        self.controller = FeatureEngineeringController()
-        
-        # 模拟数据
-        self.mock_data = pd.DataFrame({
-            'red_1': [1, 2, 3],
-            'red_2': [4, 5, 6],
-            'blue': [1, 2, 3]
-        })
-        self.model.get_data.return_value = self.mock_data
-        
-        # 模拟特征
-        self.mock_features = {
-            'basic_features': pd.DataFrame({'feature1': [1, 2, 3]}),
-            'advanced_features': pd.DataFrame({'feature2': [4, 5, 6]})
-        }
-        self.model.generate_features.return_value = self.mock_features
-    
-    def test_initialize(self):
-        """测试控制器初始化"""
-        self.controller.initialize('ssq')
-        # 由于initialize方法现在接受lottery_type参数，不再调用view的方法
-        # 检查feature_engineering是否已初始化
-        self.assertIsNotNone(self.controller.feature_engineering)
-    
-    def test_generate_features(self):
-        """测试特征生成功能"""
-        # 初始化控制器
-        self.controller.initialize('ssq')
-        
-        # 模拟feature_engineering
-        self.controller.feature_engineering = MagicMock()
-        self.controller.feature_engineering.generate_features.return_value = self.mock_features
-        
-        # 注册回调函数
-        callback = MagicMock()
-        self.controller.register_callback('on_feature_generated', callback)
-        
-        # 调用方法
-        self.controller.generate_features(periods=100)
-        
-        # 验证方法调用
-        self.controller.feature_engineering.generate_features.assert_called_once_with(100)
-        
-        # 验证回调函数被调用
-        callback.assert_called_once()
-        
-    def test_get_feature_importance_report(self):
-        """测试获取特征重要性报告功能"""
-        # 初始化控制器
-        self.controller.initialize('ssq')
-        
-        # 模拟feature_engineering
-        self.controller.feature_engineering = MagicMock()
-        self.controller.feature_engineering.get_feature_importance_report.return_value = {'feature1': 0.8, 'feature2': 0.6}
-        
-        # 调用方法
-        report = self.controller.get_feature_importance_report()
-        
-        # 验证方法调用
-        self.controller.feature_engineering.get_feature_importance_report.assert_called_once()
-        
-        # 验证返回结果
-        self.assertIsNotNone(report)
-    
-    def test_error_handling(self):
-        """测试错误处理"""
-        # 初始化控制器
-        self.controller.initialize('ssq')
-        
-        # 模拟feature_engineering抛出异常
-        self.controller.feature_engineering = MagicMock()
-        self.controller.feature_engineering.generate_features.side_effect = ValueError("测试错误")
-        
-        # 注册错误回调函数
-        error_callback = MagicMock()
-        self.controller.register_callback('on_error', error_callback)
-        
-        # 调用方法
-        self.controller.generate_features()
-        
-        # 验证错误回调被调用
-        error_callback.assert_called_once()
-        
-    def test_feature_selection(self):
-        """测试特征选择功能"""
-        # 初始化控制器
-        self.controller.initialize('ssq')
-        
-        # 模拟数据
-        features_df = pd.DataFrame({'feature1': [1, 2, 3], 'feature2': [4, 5, 6]})
-        target = pd.Series([0, 1, 0])
-        
-        # 模拟feature_engineering
-        self.controller.feature_engineering = MagicMock()
-        self.controller.feature_engineering.select_features.return_value = pd.DataFrame({'selected_feature': [1, 2, 3]})
-        
-        # 注册回调函数
-        callback = MagicMock()
-        self.controller.register_callback('on_feature_selected', callback)
-        
-        # 调用方法
-        self.controller.select_features(features_df, target, method='mutual_info', k=5)
-        
-        # 验证方法调用
-        self.controller.feature_engineering.select_features.assert_called_once_with(features_df, target, 'mutual_info', 5)
-        
-        # 验证回调函数被调用
-        callback.assert_called_once()
+
+@pytest.fixture
+def controller(monkeypatch):
+    controller = FeatureEngineeringController()
+    assert controller.initialize('ssq')
+    history = pd.DataFrame({'red_numbers': [[1, 2, 3, 10, 20, 30]] * 10, 'blue_number': [3] * 10})
+    monkeypatch.setattr(controller.feature_engineering.data_manager, 'get_history_data',
+                        lambda lottery_type, periods: history.head(periods).copy())
+    return controller
+
+
+def test_generate_features_loads_requested_history(controller):
+    received = []
+    controller.register_callback('on_feature_generated', received.append)
+    result = controller.generate_features(periods=3)
+    assert result is not None
+    assert result['red_sum'].tolist() == [66, 66, 66]
+    pd.testing.assert_frame_equal(received[0]['raw_features'], result)
+
+
+def test_core_error_reaches_controller_callback(controller):
+    errors = []
+    controller.register_callback('on_error', errors.append)
+    assert controller.generate_features(periods=0) is None
+    assert len(errors) == 1
+
+
+def test_feature_selection_and_report_use_real_scores(controller):
+    data = pd.DataFrame({'signal': np.arange(20), 'noise': np.tile([0, 1], 10)}, index=range(20, 40))
+    target = pd.Series(np.arange(20), index=data.index)
+    received = []
+    controller.register_callback('on_feature_selected', received.append)
+    result = controller.select_features(data, target, method='correlation', k=1)
+    assert result.columns.tolist() == ['signal']
+    assert result.index.equals(data.index)
+    pd.testing.assert_frame_equal(received[0], result)
+    assert controller.get_feature_importance_report()['signal'] > 0
+
+
+def test_unknown_lottery_initialization_reports_error():
+    controller = FeatureEngineeringController()
+    errors = []
+    controller.register_callback('on_error', errors.append)
+    assert not controller.initialize('unknown')
+    assert len(errors) == 1
+
+
+def test_generated_payload_is_consumed_by_existing_view_without_tk(controller):
+    from types import SimpleNamespace
+    from src.gui.frames.feature_engineering_frame import FeatureEngineeringFrame
+    class TextSink:
+        def __init__(self):
+            self.content = ''
+        def delete(self, *args):
+            self.content = ''
+        def insert(self, position, text):
+            self.content += text
+    view = SimpleNamespace(result_text=TextSink(), features_df=None)
+    errors = []
+    controller.register_callback('on_error', errors.append)
+    controller.register_callback('on_feature_generated',
+        lambda payload: FeatureEngineeringFrame._on_feature_generated(view, payload))
+    result = controller.generate_features(periods=3)
+    assert result is not None
+    assert not errors
+    assert len(view.features_df) == 3
+    assert view.raw_data['red_numbers'].tolist() == [[1, 2, 3, 10, 20, 30]] * 3
+    assert view.raw_data['blue'].tolist() == [3, 3, 3]
+    assert view.features_df.to_numpy(dtype=float).min() >= 0
+    assert view.features_df.to_numpy(dtype=float).max() <= 1
+    assert '特征预览' in view.result_text.content

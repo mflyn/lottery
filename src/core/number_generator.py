@@ -6,6 +6,8 @@ from .config_manager import ConfigManager
 
 class LotteryNumberGenerator:
     def __init__(self, lottery_type='dlt', config_manager: Optional[ConfigManager] = None):
+        if lottery_type not in ('ssq', 'dlt'):
+            raise ValueError(f"不支持的彩票类型: {lottery_type}")
         self.lottery_type = lottery_type
         self.config = config_manager or ConfigManager()
         self.strategies = {

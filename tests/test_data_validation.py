@@ -33,7 +33,7 @@ class TestDataValidator(unittest.TestCase):
         valid_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '2024001',
                 'red_numbers': [1, 5, 12, 18, 25, 33],
                 'blue_number': 8
             }
@@ -48,7 +48,7 @@ class TestDataValidator(unittest.TestCase):
         invalid_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '2024001',
                 'red_numbers': [1, 5, 12, 18, 25],  # 只有5个红球
                 'blue_number': 8
             }
@@ -63,7 +63,7 @@ class TestDataValidator(unittest.TestCase):
         invalid_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '2024001',
                 'red_numbers': [1, 5, 12, 18, 25, 35],  # 35超出范围
                 'blue_number': 8
             }
@@ -78,7 +78,7 @@ class TestDataValidator(unittest.TestCase):
         invalid_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '2024001',
                 'red_numbers': [1, 5, 12, 18, 25, 33],
                 'blue_number': 18  # 18超出范围
             }
@@ -93,7 +93,7 @@ class TestDataValidator(unittest.TestCase):
         valid_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '24001',
                 'front_numbers': [5, 12, 18, 25, 35],
                 'back_numbers': [3, 8]
             }
@@ -108,7 +108,7 @@ class TestDataValidator(unittest.TestCase):
         invalid_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '24001',
                 'front_numbers': [5, 12, 18, 25],  # 只有4个前区号码
                 'back_numbers': [3, 8]
             }
@@ -123,7 +123,7 @@ class TestDataValidator(unittest.TestCase):
         invalid_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '24001',
                 'front_numbers': [5, 12, 18, 25, 35],
                 'back_numbers': [3, 15]  # 15超出范围
             }
@@ -138,7 +138,7 @@ class TestDataValidator(unittest.TestCase):
         invalid_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001'
+                'draw_num': '2024001'
                 # 缺少号码列
             }
         ])
@@ -152,7 +152,7 @@ class TestDataValidator(unittest.TestCase):
         invalid_data = pd.DataFrame([
             {
                 'draw_date': 'invalid-date',
-                'draw_num': '24001001',
+                'draw_num': '2024001',
                 'red_numbers': [1, 5, 12, 18, 25, 33],
                 'blue_number': 8
             }
@@ -175,13 +175,13 @@ class TestDataCleaner(unittest.TestCase):
         dirty_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '2024001',
                 'red_numbers': '[1, 5, 12, 18, 25, 33]',  # 字符串格式
                 'blue_number': '8'  # 字符串格式
             },
             {
                 'draw_date': '2024/01/02',  # 不同日期格式
-                'draw_num': '24001002',
+                'draw_num': '2024002',
                 'red_numbers': [2, 6, 13, 19, 26, 32],
                 'blue_number': 9
             },
@@ -205,13 +205,13 @@ class TestDataCleaner(unittest.TestCase):
         dirty_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '24001',
                 'front_numbers': '[5, 12, 18, 25, 35]',  # 字符串格式
                 'back_numbers': '[3, 8]'  # 字符串格式
             },
             {
                 'draw_date': '2024.01.02',  # 不同日期格式
-                'draw_num': '24001002',
+                'draw_num': '24002',
                 'front_numbers': [6, 13, 19, 26, 34],
                 'back_numbers': [4, 9]
             }
@@ -228,7 +228,7 @@ class TestDataCleaner(unittest.TestCase):
         dirty_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '2024001',
                 'red_numbers': [1, 5, 12, 18, 25, 33],
                 'blue_number': 8,
                 'sales': '1,234,567',  # 带逗号的数字
@@ -239,27 +239,29 @@ class TestDataCleaner(unittest.TestCase):
         cleaned_data, report = self.ssq_cleaner.clean_data(dirty_data, auto_fix=True)
         
         # 验证数值字段被正确清理
-        self.assertIsInstance(cleaned_data['sales'].iloc[0], (int, float))
-        self.assertIsInstance(cleaned_data['prize_pool'].iloc[0], (int, float))
+        self.assertTrue(pd.api.types.is_numeric_dtype(cleaned_data['sales']))
+        self.assertEqual(cleaned_data['sales'].iloc[0], 1234567)
+        self.assertTrue(pd.api.types.is_numeric_dtype(cleaned_data['prize_pool']))
+        self.assertEqual(cleaned_data['prize_pool'].iloc[0], 9876543)
     
     def test_remove_duplicates(self):
         """测试移除重复记录"""
         duplicate_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '2024001',
                 'red_numbers': [1, 5, 12, 18, 25, 33],
                 'blue_number': 8
             },
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',  # 重复期号
+                'draw_num': '2024001',  # 重复期号
                 'red_numbers': [2, 6, 13, 19, 26, 32],
                 'blue_number': 9
             },
             {
                 'draw_date': '2024-01-02',
-                'draw_num': '24001002',
+                'draw_num': '2024002',
                 'red_numbers': [3, 7, 14, 20, 27, 31],
                 'blue_number': 10
             }
@@ -279,7 +281,7 @@ class TestConvenienceFunctions(unittest.TestCase):
         test_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '2024001',
                 'red_numbers': [1, 5, 12, 18, 25, 33],
                 'blue_number': 8
             }
@@ -294,7 +296,7 @@ class TestConvenienceFunctions(unittest.TestCase):
         test_data = pd.DataFrame([
             {
                 'draw_date': '2024-01-01',
-                'draw_num': '24001001',
+                'draw_num': '2024001',
                 'red_numbers': '[1, 5, 12, 18, 25, 33]',
                 'blue_number': '8'
             }

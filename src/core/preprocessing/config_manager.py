@@ -36,40 +36,10 @@ class PreprocessingConfigManager:
             
     def create_default_config(self) -> Dict[str, Any]:
         """创建默认配置"""
+        # General tables and both lottery types share an unconstrained default.
+        # Dataset-specific validation/transforms can be saved in named configs.
         return {
-            'validation_rules': {
-                'date': {
-                    'type': 'datetime',
-                    'required': True
-                },
-                'red_numbers': {
-                    'type': 'list',
-                    'length': 6,
-                    'range': {'min': 1, 'max': 33}
-                },
-                'blue_number': {
-                    'type': 'integer',
-                    'range': {'min': 1, 'max': 16}
-                }
-            },
-            'transformers': {
-                'date': {
-                    'type': 'datetime',
-                    'format': '%Y-%m-%d'
-                },
-                'red_numbers': {
-                    'type': 'list',
-                    'sort': True
-                },
-                'blue_number': {
-                    'type': 'integer'
-                }
-            },
-            'cleaning': {
-                'remove_duplicates': True,
-                'fill_missing': {
-                    'method': 'ffill',
-                    'columns': []
-                }
-            }
+            'validation_rules': {},
+            'transformers': {},
+            'cleaning': {'remove_duplicates': True}
         }

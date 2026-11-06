@@ -26,6 +26,7 @@ from .ssq_feature_processor import SSQFeatureProcessor
 from .dlt_feature_processor import DLTFeatureProcessor
 from .feature_validator import FeatureValidator
 from ..data_manager import LotteryDataManager
+from ..number_data import normalize_number_data
 
 class FeatureEngineering:
     """
@@ -50,22 +51,18 @@ class FeatureEngineering:
             data_path: 数据文件路径，用于初始化数据管理器
         """
         self.logger = logging.getLogger(__name__)
+        if lottery_type is not None and lottery_type not in ('ssq', 'dlt'):
+            raise ValueError(f"不支持的彩票类型: {lottery_type}")
         self.lottery_type = lottery_type
         self.processor = (SSQFeatureProcessor() if lottery_type == 'ssq' 
                          else DLTFeatureProcessor() if lottery_type == 'dlt'
                          else None)
         
-        # 如果未指定数据路径，使用默认路径
-        if data_path is None:
-            data_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                'data'
-            )
-            os.makedirs(data_path, exist_ok=True)
-            
+        # 未指定时由数据管理器使用项目配置，避免误读 src/data。
         self.data_manager = LotteryDataManager(data_path=data_path)
         self.feature_validator = FeatureValidator()
         self.feature_scores = {}
+        self.raw_data = None
         
         # 缓存相关
         self._feature_cache = {}
@@ -76,8 +73,7 @@ class FeatureEngineering:
         self.scaler = StandardScaler()
         
         # 特征存储相关
-        self.base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
-                                    'data', 'features')
+        self.base_dir = str(self.data_manager.data_path / 'features')
         os.makedirs(self.base_dir, exist_ok=True)
         
     def clear_cache(self, cache_type: str = 'all'):
@@ -199,112 +195,68 @@ class FeatureEngineering:
         return None
 
     def generate_features(self, data: pd.DataFrame, progress_callback=None) -> pd.DataFrame:
-        """生成所有特征
-        
-        Args:
-            data: 原始数据
-            progress_callback: 进度回调函数，接收(progress, message)参数
-            
-        Returns:
-            pd.DataFrame: 生成的特征
-        """
-        if self.processor is None:
-            raise ValueError("特征处理器未初始化，请在创建 FeatureEngineering 时指定 lottery_type")
-        
+        """从号码DataFrame生成数值特征，保留行索引并报告真实执行结果。"""
         try:
-            # 如果提供了回调函数，使用进度跟踪
             if progress_callback:
                 progress_callback(0, "开始生成特征")
-                
-            basic_features = self._generate_basic_features(data)
-            if basic_features is None:
-                raise ValueError("基础特征生成失败")
-            
-            # 调用处理器的高级特征方法 (如果存在)
+            if self.processor is None:
+                raise ValueError("特征处理器未初始化，请在创建 FeatureEngineering 时指定 lottery_type")
+            prepared = normalize_number_data(data, self.lottery_type)
+            features = self._generate_basic_features(prepared)
             if hasattr(self.processor, 'extract_advanced_features'):
-                advanced_features = self.processor.extract_advanced_features(data) # Pass original data
-                basic_features = pd.concat([basic_features, advanced_features], axis=1)
-            
+                advanced = self.processor.extract_advanced_features(prepared)
+                features = pd.concat([features, advanced], axis=1)
+            if not np.isfinite(features.to_numpy(dtype=float)).all():
+                raise ValueError("生成的特征包含无效值")
+            self.raw_data = prepared.copy()
             if progress_callback:
                 progress_callback(100, "特征生成完成")
-            print(basic_features.dtypes)
-            return basic_features
-            
-        except Exception as e:
+            return features
+        except Exception as exc:
             if progress_callback:
-                progress_callback(-1, f"错误: {str(e)}")
-            raise ValueError(f"特征生成失败: {str(e)}")
+                progress_callback(-1, f"错误: {exc}")
+            raise ValueError(f"特征生成失败: {exc}") from exc
+
+    def generate_features_from_history(self, periods: int = 100, progress_callback=None) -> pd.DataFrame:
+        """按期数读取历史后调用DataFrame特征接口。"""
+        if isinstance(periods, bool) or not isinstance(periods, int) or periods <= 0:
+            raise ValueError("期数必须为正整数")
+        history = self.data_manager.get_history_data(self.lottery_type, periods=periods)
+        return self.generate_features(history, progress_callback=progress_callback)
 
     def _generate_basic_features(self, data: pd.DataFrame, periods: int = 7) -> pd.DataFrame:
-        """生成基础特征
-        
-        Args:
-            data: 原始数据
-            periods: 历史周期数,默认为7
-        
-        Returns:
-            pd.DataFrame: 基础特征
-        """
-        try:
-            df = data.copy()
-            
-            # 检查必要的列是否存在
-            if 'number' not in df.columns:
-                # 如果是双色球或大乐透数据，尝试从红球列创建number列
-                if self.lottery_type in ['ssq', 'dlt'] and 'red_1' in df.columns:
-                    df['number'] = df['red_1']
-                elif self.lottery_type == 'dlt' and 'front_1' in df.columns:
-                    df['number'] = df['front_1']
-                else:
-                    # 如果没有可用的列，使用索引作为number列
-                    df['number'] = df.index
-            
-            # 计算红球相关特征
-            red_columns = [col for col in df.columns if col.startswith('red_') and col not in ['red_sum', 'red_numbers']]
-            if red_columns and self.lottery_type == 'ssq':
-                df['red_sum'] = df[red_columns].sum(axis=1)
-                df['red_mean'] = df[red_columns].mean(axis=1)
-                df['red_std'] = df[red_columns].std(axis=1)
-                df['red_odd_count'] = df[red_columns].apply(lambda x: sum(v % 2 == 1 for v in x), axis=1)
-                df['red_even_count'] = df[red_columns].apply(lambda x: sum(v % 2 == 0 for v in x), axis=1)
-                primes = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31}
-                df['red_prime_count'] = df[red_columns].apply(lambda x: sum(v in primes for v in x), axis=1)
-                df['red_consecutive_count'] = 0
-
-            front_columns = [col for col in df.columns if col.startswith('front_') and col not in ['front_sum', 'front_numbers']]
-            if front_columns and self.lottery_type == 'dlt':
-                df['front_sum'] = df[front_columns].sum(axis=1)
-                df['front_mean'] = df[front_columns].mean(axis=1)
-                df['front_std'] = df[front_columns].std(axis=1)
-                df['front_odd_count'] = df[front_columns].apply(lambda x: sum(v % 2 == 1 for v in x), axis=1)
-                df['front_even_count'] = df[front_columns].apply(lambda x: sum(v % 2 == 0 for v in x), axis=1)
-            
-            if 'blue_1' in df.columns:
-                df['blue_is_prime'] = df['blue_1'].apply(lambda x: x in {2, 3, 5, 7, 11, 13})
-                df['blue_is_odd'] = df['blue_1'].apply(lambda x: x % 2 == 1)
-            
-            features = pd.DataFrame({
-                'number_frequency_ma7': df['number'].rolling(window=periods).mean(),
-                'number_frequency_mean': df['number'].mean(),
-                'number_frequency_std7': df['number'].rolling(window=periods).std().fillna(0),
-                'gap_days': df['number'].diff().fillna(0),
-                'sum_value_ma7': df['number'].rolling(window=periods).sum()
-            })
-            
-            feature_cols = ['red_sum', 'red_mean', 'red_std', 'red_odd_count', 'red_even_count', 
-                       'red_prime_count', 'red_consecutive_count', 'blue_is_prime', 'blue_is_odd',
-                       'front_sum', 'front_mean', 'front_std', 'front_odd_count', 'front_even_count']
-            for col in feature_cols:
-                if col in df.columns:
-                    features[col] = df[col]
-            
-            features = features.bfill().ffill()
-            print(features.dtypes)
-            return features
-            
-        except Exception as e:
-            self.logger.error(f"生成基础特征时出错: {str(e)}")
-            return None
+        """生成球区统计及只依赖当前与过去记录的滚动特征。"""
+        df = normalize_number_data(data, self.lottery_type)
+        original_index = df.index
+        date_column = next((column for column in ['draw_date', 'date'] if column in df.columns), None)
+        if date_column:
+            df[date_column] = pd.to_datetime(df[date_column], errors='raise')
+            if df[date_column].isna().any():
+                raise ValueError("开奖日期不能为空")
+            df = df.sort_values(date_column, kind='stable')
+        prefix, count = ('red', 6) if self.lottery_type == 'ssq' else ('front', 5)
+        columns = [f'{prefix}_{i + 1}' for i in range(count)]
+        number = df[columns[0]]
+        features = pd.DataFrame(index=df.index)
+        rolling = number.rolling(window=periods, min_periods=1)
+        features['number_frequency_ma7'] = rolling.mean()
+        features['number_frequency_mean'] = number.expanding().mean()
+        features['number_frequency_std7'] = rolling.std().fillna(0)
+        features['gap_days'] = df[date_column].diff().dt.total_seconds().div(86400).fillna(0) if date_column else 0
+        features['sum_value_ma7'] = rolling.sum()
+        balls = df[columns]
+        features[f'{prefix}_sum'] = balls.sum(axis=1)
+        features[f'{prefix}_mean'] = balls.mean(axis=1)
+        features[f'{prefix}_std'] = balls.std(axis=1)
+        features[f'{prefix}_odd_count'] = balls.mod(2).sum(axis=1)
+        features[f'{prefix}_even_count'] = count - features[f'{prefix}_odd_count']
+        if self.lottery_type == 'ssq':
+            primes = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31}
+            features['red_prime_count'] = balls.isin(primes).sum(axis=1)
+            features['red_consecutive_count'] = balls.diff(axis=1).eq(1).sum(axis=1)
+            features['blue_is_prime'] = df['blue_number'].isin(primes)
+            features['blue_is_odd'] = df['blue_number'].mod(2).eq(1)
+        return features.reindex(original_index)
 
     def process_with_progress(self, func, callback=None):
         """使用进度回调执行函数
@@ -398,62 +350,70 @@ class FeatureEngineering:
             self.logger.error(f"特征归一化处理时出错: {str(e)}")
             raise ValueError(f"特征归一化失败: {str(e)}")
 
-    def select_features(self, features: pd.DataFrame, target: pd.Series, 
-                       method: str = 'mutual_info', n_features: int = 10) -> pd.DataFrame:
-        """特征选择
-        
-        Args:
-            features: 特征DataFrame
-            target: 目标变量
-            method: 特征选择方法 ('mutual_info', 'f_regression', 'correlation')
-            n_features: 选择的特征数量
-            
-        Returns:
-            选择后的特征DataFrame
-        """
-        if method == 'mutual_info':
-            selector = SelectKBest(score_func=mutual_info_regression, k=n_features)
-        elif method == 'f_regression':
-            selector = SelectKBest(score_func=f_regression, k=n_features)
-        elif method == 'correlation':
-            # 实现基于相关系数的特征选择
-            corr_matrix = pd.concat([features, target], axis=1).corr().abs()
-            target_corr = corr_matrix[target.name].sort_values(ascending=False)
-            selected_features = target_corr[1:n_features+1].index
-            return features[selected_features]
-            
-        X_selected = selector.fit_transform(features, target)
-        selected_features = features.columns[selector.get_support()]
-        
-        return pd.DataFrame(X_selected, columns=selected_features)
+    def select_features(self, features: pd.DataFrame, target: pd.Series,
+                        method: str = 'mutual_info', n_features: int = 10) -> pd.DataFrame:
+        """选择真实数值特征，保留输入索引并记录实际评分。"""
+        if not isinstance(features, pd.DataFrame) or features.empty:
+            raise ValueError("特征不能为空")
+        if isinstance(n_features, bool) or not isinstance(n_features, int) or not 1 <= n_features <= features.shape[1]:
+            raise ValueError("选择特征数必须在1和特征列数之间")
+        y = self._aligned_target(features, target)
+        if method == 'correlation':
+            scores = self._correlation_scores(features, y)
+            selected = scores.nlargest(n_features).index
+        elif method in ('mutual_info', 'f_regression'):
+            score_func = (lambda X, y: mutual_info_regression(X, y, random_state=42,
+                          n_neighbors=min(3, len(X) - 1))) if method == 'mutual_info' else f_regression
+            selector = SelectKBest(score_func=score_func, k=n_features)
+            selector.fit(features, y)
+            scores = pd.Series(np.nan_to_num(selector.scores_), index=features.columns)
+            selected = features.columns[selector.get_support()]
+        else:
+            raise ValueError(f"不支持的特征选择方法: {method}")
+        self.feature_scores = {column: float(scores[column]) for column in selected}
+        return features.loc[:, selected].copy()
 
     def analyze_feature_importance(self, features: pd.DataFrame, target: pd.Series) -> Dict[str, float]:
-        """分析特征重要性
-        
-        Args:
-            features: 特征DataFrame
-            target: 目标变量
-            
-        Returns:
-            特征重要性得分字典
-        """
-        # 计算互信息得分
-        mi_scores = mutual_info_regression(features, target)
-        
-        # 计算相关系数
-        correlations = features.corrwith(target).abs()
-        
-        # 综合评分
-        importance_scores = {}
-        for i, feature in enumerate(features.columns):
-            importance_scores[feature] = (mi_scores[i] + correlations[feature]) / 2
-            
-        # 按重要性排序
-        self.feature_scores = dict(sorted(importance_scores.items(), 
-                                        key=lambda x: x[1], 
-                                        reverse=True))
-        
+        """以互信息及相关性分析特征，常数列的相关性按零处理。"""
+        if len(features) < 2:
+            raise ValueError("特征重要性分析至少需要两条记录")
+        y = self._aligned_target(features, target)
+        mi_scores = mutual_info_regression(features, y, random_state=42,
+                                           n_neighbors=min(3, len(features) - 1))
+        correlations = self._correlation_scores(features, y)
+        scores = {column: float((mi_scores[i] + correlations[column]) / 2)
+                  for i, column in enumerate(features.columns)}
+        self.feature_scores = dict(sorted(scores.items(), key=lambda item: item[1], reverse=True))
         return self.feature_scores
+
+    def get_feature_importance_report(self) -> Dict[str, float]:
+        return dict(self.feature_scores)
+
+    @staticmethod
+    def _aligned_target(features: pd.DataFrame, target) -> pd.Series:
+        if not features.index.is_unique:
+            raise ValueError("特征索引必须唯一")
+        if isinstance(target, pd.Series):
+            if (not target.index.is_unique or len(target) != len(features)
+                    or not features.index.isin(target.index).all()):
+                raise ValueError("目标与特征必须具有相同且唯一的索引")
+            result = target.reindex(features.index)
+        else:
+            values = np.asarray(target)
+            if values.ndim != 1 or len(values) != len(features):
+                raise ValueError("目标必须为与特征等长的一维数组")
+            result = pd.Series(values, index=features.index)
+        if not np.isfinite(result.to_numpy(dtype=float)).all():
+            raise ValueError("目标必须为有限数值")
+        return result
+
+    @staticmethod
+    def _correlation_scores(features: pd.DataFrame, target: pd.Series) -> pd.Series:
+        scores = pd.Series(0.0, index=features.columns)
+        varying = features.columns[features.nunique() > 1]
+        if target.nunique() > 1 and len(varying):
+            scores.loc[varying] = features[varying].corrwith(target).abs().fillna(0)
+        return scores
 
     def visualize_features(self, features: pd.DataFrame, target: pd.Series = None) -> Figure:
         """特征可视化

@@ -163,16 +163,30 @@ class DataManagerWindow(tk.Toplevel):
         # 返回pandas DataFrame
         pass
 
+    def _update_ui_after_fetch(self):
+        """在主线程中更新UI"""
+        self._update_data_view()
+        self._validate_data()
+        messagebox.showinfo("成功", "数据更新成功!")
+
     def _update_data(self):
-        """更新数据"""
-        try:
-            self.data_manager.update_lottery_data(self.lottery_type.get())
-            self._update_data_view()
-            self._validate_data()
-            messagebox.showinfo("成功", "数据更新成功!")
-            
-        except Exception as e:
-            messagebox.showerror("错误", f"更新数据失败: {str(e)}")
+        """更新数据 (多线程版本)"""
+        lottery_type = self.lottery_type.get()
+
+        def _update_thread():
+            try:
+                # 调用正确的 update_data 方法
+                success = self.data_manager.update_data(lottery_type)
+                if success:
+                    # 在主线程更新UI
+                    self.after(0, self._update_ui_after_fetch)
+                else:
+                    self.after(0, lambda: messagebox.showerror("错误", "更新数据失败: 获取不到最新数据"))
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("错误", f"更新数据失败: {str(e)}"))
+
+        import threading
+        threading.Thread(target=_update_thread, daemon=True).start()
     
     def _export_data(self):
         """导出数据"""

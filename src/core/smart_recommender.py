@@ -5,6 +5,7 @@ import pandas as pd
 import random
 from typing import List, Dict
 from src.core.features.feature_engineering import FeatureEngineering
+from src.core.number_data import normalize_number_data
 from src.core.features.ssq_feature_processor import SSQFeatureProcessor
 from src.core.features.dlt_feature_processor import DLTFeatureProcessor
 
@@ -26,90 +27,63 @@ class SmartRecommender:
             self.evaluator = None
 
     def _prepare_data_for_feature_engineering(self, history_data: pd.DataFrame, lottery_type: str) -> pd.DataFrame:
-        """Prepare data for feature engineering by expanding number columns."""
-        df = history_data.copy()
-        if lottery_type == 'ssq' and 'red_1' not in df.columns:
-            red_numbers = df['red_numbers'].apply(pd.Series)
-            red_numbers.columns = [f'red_{i+1}' for i in range(red_numbers.shape[1])]
-            blue_numbers = df['blue_number'].apply(pd.Series)
-            blue_numbers.columns = [f'blue_{i+1}' for i in range(blue_numbers.shape[1])]
-            df = pd.concat([df, red_numbers, blue_numbers], axis=1)
-        elif lottery_type == 'dlt' and 'front_1' not in df.columns:
-            front_numbers = df['front_numbers'].apply(pd.Series)
-            front_numbers.columns = [f'front_{i+1}' for i in range(front_numbers.shape[1])]
-            back_numbers = df['back_numbers'].apply(pd.Series)
-            back_numbers.columns = [f'back_{i+1}' for i in range(back_numbers.shape[1])]
-            df = pd.concat([df, front_numbers, back_numbers], axis=1)
-        return df
+        return normalize_number_data(history_data, lottery_type)
 
-    def generate_recommendations(self,
-                               history_data: pd.DataFrame,
-                               num_recommendations: int = 5) -> List[Dict]:
-        """生成智能推荐号码"""
-        if 'red_numbers' in history_data.columns:
+    def generate_recommendations(self, history_data: pd.DataFrame,
+                                 num_recommendations: int = 5) -> List[Dict]:
+        """从规范化的历史数据生成候选；训练集不包含未知的下一期目标。"""
+        if isinstance(num_recommendations, bool) or not isinstance(num_recommendations, int) or num_recommendations < 0:
+            raise ValueError("推荐注数必须为非负整数")
+        if num_recommendations == 0:
+            return []
+        if not isinstance(history_data, pd.DataFrame) or len(history_data) < 7:
+            raise ValueError("至少需要7期有效历史数据")
+        if 'red_numbers' in history_data.columns or 'red_1' in history_data.columns:
             lottery_type = 'ssq'
-        elif 'front_numbers' in history_data.columns:
+        elif 'front_numbers' in history_data.columns or 'front_1' in history_data.columns:
             lottery_type = 'dlt'
         else:
             raise ValueError("Unknown lottery type in history_data")
+        prepared = self._prepare_data_for_feature_engineering(history_data, lottery_type)
+        date_column = next((column for column in ['draw_date', 'date'] if column in prepared.columns), None)
+        if date_column:
+            prepared[date_column] = pd.to_datetime(prepared[date_column], errors='raise')
+            if prepared[date_column].isna().any():
+                raise ValueError("开奖日期不能为空")
+            prepared = prepared.sort_values(date_column, kind='stable')
 
         self.feature_engineer.lottery_type = lottery_type
         self.feature_engineer.processor = SSQFeatureProcessor() if lottery_type == 'ssq' else DLTFeatureProcessor()
-
-        prepared_data = self._prepare_data_for_feature_engineering(history_data, lottery_type)
-        print(prepared_data.dtypes)
-        print(prepared_data.dtypes)
-        features = self.feature_engineer.generate_features(prepared_data)
-
-        # Create a dummy target variable (e.g., sum of next draw's red numbers)
-        if lottery_type == 'ssq':
-            y = prepared_data['red_1'].shift(-1)
-        else:
-            y = prepared_data['front_1'].shift(-1)
-            
-        features = features.iloc[:-1]
-        y = y.iloc[:-1]
-        
-        # Drop rows with NaN in features or target
-        features = features.dropna()
-        y = y[features.index]
-        
-        if features.empty:
-            raise ValueError("Not enough data to generate features and target.")
-
-        print(features.dtypes)
-        self.train_models(features, y)
-
-        # Predict on the last set of features
-        last_features = features.tail(1)
-        candidates = self._generate_candidates(last_features, num_recommendations)
-
-        if self.evaluator:
-            scored_candidates = self._score_candidates(candidates)
-        else:
-            scored_candidates = [{'numbers': c, 'score': 0} for c in candidates]
-
-        diverse_recommendations = self._optimize_diversity(scored_candidates)
-
-        return diverse_recommendations[:num_recommendations]
+        features = self.feature_engineer.generate_features(prepared)
+        latest_features = features.tail(1)
+        target_column = 'red_1' if lottery_type == 'ssq' else 'front_1'
+        target = prepared[target_column].shift(-1).iloc[:-1]
+        self.train_models(features.iloc[:-1], target)
+        candidates = self._generate_candidates(latest_features, num_recommendations)
+        scored = self._score_candidates(candidates)
+        return self._optimize_diversity(scored)[:num_recommendations]
 
     def train_models(self, X: pd.DataFrame, y: pd.Series) -> Dict:
-        """训练机器学习模型"""
+        """接受数值DataFrame或数组，以时间顺序拆分训练集和验证集。"""
+        label_alignment = isinstance(X, pd.DataFrame) and isinstance(y, pd.Series)
+        X = pd.DataFrame(X).copy()
+        values = np.asarray(y)
+        if values.ndim != 1 or len(values) != len(X):
+            raise ValueError("特征与一维目标的记录数必须一致")
+        y = (FeatureEngineering._aligned_target(X, y) if label_alignment
+             else pd.Series(values, index=X.index))
         if X.empty or y.empty:
             return {}
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-        print(X_train.dtypes)
-        print(X_train.head())
+        if len(X) < 6 or not np.isfinite(X.to_numpy(dtype=float)).all() or not np.isfinite(y.to_numpy(dtype=float)).all():
+            raise ValueError("训练至少需要6条有限数值记录")
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
-
         results = {}
         for name, model in self.models.items():
             model.fit(X_train_scaled, y_train)
-            train_score = model.score(X_train_scaled, y_train)
-            test_score = model.score(X_test_scaled, y_test)
-            results[name] = {'train_score': train_score, 'test_score': test_score}
+            results[name] = {'train_score': model.score(X_train_scaled, y_train),
+                             'test_score': model.score(X_test_scaled, y_test)}
         return results
 
     def _generate_candidates(self, features: pd.DataFrame, num_recommendations: int) -> List[Dict]:

@@ -8,12 +8,14 @@ import queue
 from src.core.analyzers import FrequencyAnalyzer
 from src.core.number_generator import generate_random_numbers, generate_hot_cold_numbers
 from src.core.smart_recommender import SmartRecommender
+from src.gui.fusion_controls import FusionGenerationMixin
+from src.core.generators.fusion.config import FusionConfig
 
 if TYPE_CHECKING:
     from src.core.data_manager import LotteryDataManager
     from src.gui.frames.number_evaluation_frame import NumberEvaluationFrame
 
-class GenerationFrame(ttk.Frame):
+class GenerationFrame(FusionGenerationMixin, ttk.Frame):
     """号码推荐功能框架"""
     def __init__(self, master: tk.Widget, data_manager: 'LotteryDataManager', analyzer=None, evaluation_frame: Optional['NumberEvaluationFrame']=None, **kwargs):
         """初始化号码推荐框架
@@ -30,14 +32,17 @@ class GenerationFrame(ttk.Frame):
         self.evaluation_frame = evaluation_frame  # 可选：号码评价页实例，用于读取评分配置
         self.generation_queue = queue.Queue()
         self.is_generating = False
+        self._poll_id = None
 
         self.create_widgets()
+        self._init_fusion()
         self._check_generation_queue()
 
     def create_widgets(self):
         """创建界面组件"""
         # --- 顶部配置区域 ---
         config_frame = ttk.LabelFrame(self, text="生成选项")
+        self.config_frame = config_frame
         config_frame.pack(padx=10, pady=(10, 5), fill="x")
 
         # 彩票类型选择
@@ -64,7 +69,8 @@ class GenerationFrame(ttk.Frame):
             "去热门-适中": "anti_popular_moderate",
             "去热门-轻度": "anti_popular_light",
             "混合模式": "hybrid_anti_popular",
-            "最高评分（整注）": "top_scored"
+            "最高评分（整注）": "top_scored",
+            "融合推荐": "fusion"
         }
         # 搜索参数（仅对“最高评分（整注）”策略生效）
         self.periods_label = ttk.Label(config_frame, text="统计期数:")
@@ -93,6 +99,7 @@ class GenerationFrame(ttk.Frame):
 
         # --- 历史过滤设置 ---
         filter_frame = ttk.LabelFrame(config_frame, text="历史重复过滤")
+        self.filter_frame = filter_frame
         filter_frame.grid(row=5, column=0, columnspan=4, padx=5, pady=5, sticky="ew")
 
         # 启用开关
@@ -141,6 +148,7 @@ class GenerationFrame(ttk.Frame):
 
         # --- 结果显示区域 ---
         result_frame = ttk.LabelFrame(self, text="推荐号码")
+        self.result_frame = result_frame
         result_frame.pack(padx=10, pady=5, fill="both", expand=True)
 
         self.result_text = tk.Text(result_frame, wrap="word", height=15, state="disabled")
@@ -181,6 +189,7 @@ class GenerationFrame(ttk.Frame):
     def _on_strategy_change(self, event=None):
         """策略改变时更新评分参数显示和搜索参数可见性"""
         strategy = self.strategy_map.get(self.strategy_var.get())
+        self._sync_fusion_visibility()
         if strategy == "top_scored":
             self._update_scoring_info_display()
             self._show_search_params()
@@ -190,12 +199,7 @@ class GenerationFrame(ttk.Frame):
 
     def _update_scoring_info_display(self):
         """更新评分参数显示（从评价页读取）"""
-        cfg = self._get_ssq_scoring_config_from_evaluation()
-        info_text = (f"当前评分参数: 蓝球频率权重={cfg['freq_blue_weight']:.2f}, "
-                     f"蓝球遗漏权重={cfg['miss_blue_weight']:.2f}, "
-                     f"遗漏曲线={cfg['missing_curve']}, "
-                     f"σ系数={cfg['missing_sigma_factor']:.2f}")
-        self.scoring_info_label.config(text=info_text)
+        self.scoring_info_label.config(text='按评价页六项权重计算单注融合 F；候选池内排序。')
 
     def _show_search_params(self):
         """显示搜索参数控件"""
@@ -229,6 +233,7 @@ class GenerationFrame(ttk.Frame):
         self.result_text.config(state="normal")
         self.result_text.delete("1.0", tk.END)
         self.result_text.config(state="disabled")
+        self._clear_fusion_result()
 
     def generate_numbers(self):
         """根据选定策略生成号码"""
@@ -236,12 +241,33 @@ class GenerationFrame(ttk.Frame):
             messagebox.showwarning("请稍候", "正在生成号码中，请勿重复操作。")
             return
 
-        self.clear_results()
-        lottery_type = self.lottery_type_var.get()
-        num_sets = self.num_sets_var.get()
-        strategy_display_name = self.strategy_var.get()
-        strategy = self.strategy_map.get(strategy_display_name, "random")
+        try:
+            lottery_type = self.lottery_type_var.get()
+            num_sets = self.num_sets_var.get()
+            strategy_display_name = self.strategy_var.get()
+            strategy = self.strategy_map.get(strategy_display_name, "random")
+            fusion_request = self._read_fusion_request(lottery_type) if strategy == 'fusion' else None
+            if fusion_request:
+                num_sets = fusion_request[0]
 
+            # Tk variables belong to the UI thread. Workers receive plain snapshots so
+            # they can finish safely even if the window is closed before they start.
+            filter_config = None
+            if strategy == "smart_recommend" or strategy in ["anti_popular_strict", "anti_popular_moderate", "anti_popular_light", "hybrid_anti_popular"]:
+                filter_config = self._get_history_filter_config()
+            search_config = None
+            if strategy == "top_scored":
+                search_config = {
+                    'periods': int(self.periods_var.get()),
+                    'pool_size': int(self.pool_size_var.get()),
+                    'scoring': self._get_fusion_scoring_config(),
+                    'history_file': str(self.data_manager.data_files[lottery_type]),
+                }
+        except (tk.TclError, ValueError, TypeError) as exc:
+            messagebox.showerror("输入错误", f"请检查注数、期数及策略参数。\n{exc}")
+            return
+
+        self.clear_results()
         self.is_generating = True
         self.generate_button.config(text="生成中...", state=tk.DISABLED)
 
@@ -259,16 +285,18 @@ class GenerationFrame(ttk.Frame):
         self.result_text.insert("1.0", display_text)
         self.result_text.config(state="disabled")
 
-        if strategy == "smart_recommend":
-            generation_thread = threading.Thread(target=self._background_smart_generation, args=(lottery_type, num_sets), daemon=True)
+        if strategy == 'fusion':
+            self._start_fusion(fusion_request)
+        elif strategy == "smart_recommend":
+            generation_thread = threading.Thread(target=self._background_smart_generation, args=(lottery_type, num_sets, filter_config), daemon=True)
             generation_thread.start()
         elif strategy in ["anti_popular_strict", "anti_popular_moderate", "anti_popular_light", "hybrid_anti_popular"]:
             # 去热门策略使用线程处理（可能较慢）
-            generation_thread = threading.Thread(target=self._background_anti_popular_generation, args=(lottery_type, num_sets, strategy), daemon=True)
+            generation_thread = threading.Thread(target=self._background_anti_popular_generation, args=(lottery_type, num_sets, strategy, filter_config), daemon=True)
             generation_thread.start()
         elif strategy == "top_scored":
             # 最高评分策略可能耗时，单独线程运行
-            generation_thread = threading.Thread(target=self._background_top_scored_generation, args=(lottery_type, num_sets), daemon=True)
+            generation_thread = threading.Thread(target=self._background_top_scored_generation, args=(lottery_type, num_sets, search_config), daemon=True)
             generation_thread.start()
         else:
             # For other strategies, run them directly as they are faster
@@ -302,7 +330,7 @@ class GenerationFrame(ttk.Frame):
 
         self.generation_queue.put((generated_sets, error_msg, lottery_type, strategy))
 
-    def _background_smart_generation(self, lottery_type, num_sets):
+    def _background_smart_generation(self, lottery_type, num_sets, filter_config):
         generated_sets = []
         error_msg = None
         try:
@@ -314,7 +342,6 @@ class GenerationFrame(ttk.Frame):
             smart_generator = create_generator('smart', lottery_type)
 
             # 3. 配置历史过滤（如果启用）
-            filter_config = self._get_history_filter_config()
             if filter_config['enabled']:
                 # 设置过滤配置
                 max_overlap_key = 'max_red_overlap' if lottery_type == 'ssq' else 'max_front_overlap'
@@ -345,12 +372,10 @@ class GenerationFrame(ttk.Frame):
 
         except Exception as e:
             error_msg = str(e)
-            import traceback
-            traceback.print_exc()
 
         self.generation_queue.put((generated_sets, error_msg, lottery_type, "smart_recommend"))
 
-    def _background_anti_popular_generation(self, lottery_type, num_sets, strategy):
+    def _background_anti_popular_generation(self, lottery_type, num_sets, strategy, filter_config):
         """去热门策略生成"""
         generated_sets = []
         error_msg = None
@@ -361,7 +386,6 @@ class GenerationFrame(ttk.Frame):
             generator = SmartNumberGenerator(lottery_type)
 
             # 配置历史过滤
-            filter_config = self._get_history_filter_config()
             if filter_config['enabled']:
                 max_overlap_key = 'max_red_overlap' if lottery_type == 'ssq' else 'max_front_overlap'
                 generator.set_history_filter_config(
@@ -394,8 +418,6 @@ class GenerationFrame(ttk.Frame):
 
         except Exception as e:
             error_msg = str(e)
-            import traceback
-            traceback.print_exc()
 
         self.generation_queue.put((generated_sets, error_msg, lottery_type, strategy))
 
@@ -442,73 +464,41 @@ class GenerationFrame(ttk.Frame):
         return converted
 
 
-    def _get_ssq_scoring_config_from_evaluation(self):
-        """
-        从“号码评价”页读取当前的双色球评分设置。
-        若不可用则返回默认值。
-        """
-        config = {
-            'freq_blue_weight': 0.3,
-            'miss_blue_weight': 0.3,
-            'missing_curve': 'linear',
-            'missing_sigma_factor': 1.0,
-        }
-        ev = getattr(self, 'evaluation_frame', None)
-        if not ev:
-            return config
-        try:
-            fbw = float(ev.ssq_freq_blue_weight_var.get())
-            mbw = float(ev.ssq_miss_blue_weight_var.get())
-            fbw = max(0.0, min(1.0, fbw))
-            mbw = max(0.0, min(1.0, mbw))
-            curve = (ev.ssq_missing_curve_var.get() or 'linear').strip().lower()
-            if curve not in ('linear', 'gaussian'):
-                curve = 'linear'
-            sigma = float(ev.ssq_missing_sigma_var.get())
-            sigma = max(0.01, sigma)
-            config.update({
-                'freq_blue_weight': fbw,
-                'miss_blue_weight': mbw,
-                'missing_curve': curve,
-                'missing_sigma_factor': sigma,
-            })
-        except Exception:
-            pass
-        return config
+    def _get_fusion_scoring_config(self):
+        periods=int(self.periods_var.get())
+        if self.evaluation_frame is not None:
+            return self.evaluation_frame.get_fusion_config(periods)
+        return FusionConfig(history_periods=periods)
 
-
-
-    def _background_top_scored_generation(self, lottery_type, num_sets):
+    def _background_top_scored_generation(self, lottery_type, num_sets, search_config):
         """最高评分（整注）策略：调用剪枝搜索返回评分最高的整注组合"""
         generated_sets = []
         error_msg = None
         try:
-            # 读取搜索参数
-            periods = int(self.periods_var.get() if hasattr(self, 'periods_var') else 100)
-            pool_size = int(self.pool_size_var.get() if hasattr(self, 'pool_size_var') else 18)
+            periods = search_config['periods']
+            pool_size = search_config['pool_size']
 
             if lottery_type == 'ssq':
                 # 双色球
                 from scripts.find_top_ssq import find_top_ssq
                 
-                cfg = self._get_ssq_scoring_config_from_evaluation()
+                cfg = search_config['scoring']
                 
                 results = find_top_ssq(
                     top_k=int(num_sets),
                     periods=periods,
                     pool_size=pool_size,
                     out_path=None,
-                    freq_blue_weight=cfg['freq_blue_weight'],
-                    miss_blue_weight=cfg['miss_blue_weight'],
-                    missing_curve=cfg['missing_curve'],
-                    missing_sigma_factor=cfg['missing_sigma_factor'],
+                    config=cfg,
+                    history_file=search_config['history_file'],
                 )
 
                 for item in results[:int(num_sets)]:
                     generated_sets.append({
                         'red': item['red_numbers'],
                         'blue': item['blue_number'],
-                        'score': item.get('total_score')
+                        'score': item.get('total_score'),
+                        'random_reference': item.get('random_reference')
                     })
             
             elif lottery_type == 'dlt':
@@ -519,14 +509,17 @@ class GenerationFrame(ttk.Frame):
                     top_k=int(num_sets),
                     periods=periods,
                     pool_size=pool_size,
-                    out_path=None
+                    out_path=None,
+                    config=search_config['scoring'],
+                    history_file=search_config['history_file'],
                 )
 
                 for item in results[:int(num_sets)]:
                     generated_sets.append({
                         'front': item['front_numbers'],
                         'back': item['back_numbers'],
-                        'score': item.get('total_score')
+                        'score': item.get('total_score'),
+                        'random_reference': item.get('random_reference')
                     })
             
             else:
@@ -534,8 +527,6 @@ class GenerationFrame(ttk.Frame):
 
         except Exception as e:
             error_msg = str(e)
-            import traceback
-            traceback.print_exc()
 
         self.generation_queue.put((generated_sets, error_msg, lottery_type, "top_scored"))
 
@@ -543,8 +534,13 @@ class GenerationFrame(ttk.Frame):
 
 
     def _check_generation_queue(self):
+        self._poll_id = None
+        self._poll_fusion_progress()
         try:
             message = self.generation_queue.get_nowait()
+            if isinstance(message, dict) and message.get('kind') == 'fusion':
+                self._finish_fusion(message)
+                return
             generated_sets, error_msg, lottery_type, strategy = message
 
             if error_msg:
@@ -562,13 +558,17 @@ class GenerationFrame(ttk.Frame):
                         blue_display = int(nums['blue'])
                         formatted_nums = f"红球: {' '.join(f'{n:02d}' for n in red_display)} | 蓝球: {blue_display:02d}"
                         if isinstance(nums, dict) and 'score' in nums and nums['score'] is not None:
-                            formatted_nums += f" | 评分: {nums['score']:.1f}"
+                            formatted_nums += f" | 融合 F: {nums['score']:.6f}"
                     elif lottery_type == 'dlt':
                         front_display = sorted([int(n) for n in nums['front']])
                         back_display = sorted([int(n) for n in nums['back']])
                         formatted_nums = f"前区: {' '.join(f'{n:02d}' for n in front_display)} | 后区: {' '.join(f'{n:02d}' for n in back_display)}"
+                        if nums.get('score') is not None:
+                            formatted_nums += f" | 融合 F: {nums['score']:.6f}"
                     else:
                         formatted_nums = str(nums)
+                    if isinstance(nums,dict) and nums.get('random_reference') is not None:
+                        formatted_nums += f" | 严格超过约 {nums['random_reference']['exceed_percent']:.1f}% 随机单注"
                     display_text += f"第 {i+1} 注: {formatted_nums}\n"
             else:
                 display_text += "未能生成号码。\n"
@@ -583,7 +583,15 @@ class GenerationFrame(ttk.Frame):
         except queue.Empty:
             pass
         finally:
-            self.master.after(100, self._check_generation_queue)
+            if self.winfo_exists():
+                self._poll_id = self.after(100, self._check_generation_queue)
+
+    def destroy(self):
+        self._fusion_stop.set()
+        if self._poll_id is not None:
+            self.after_cancel(self._poll_id)
+            self._poll_id = None
+        super().destroy()
 
     def _finalize_generation_ui(self):
         self.generate_button.config(text="生成号码", state=tk.NORMAL)

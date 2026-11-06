@@ -192,12 +192,9 @@ class DataCleaner:
             
             # 根据彩票类型验证期号格式
             if self.lottery_type == 'ssq':
-                # 双色球期号通常是8位数字 (YYYYNNN)
-                if len(issue_clean) == 8 and issue_clean.isdigit():
+                # 双色球期号为7位数字 (YYYYNNN)，不补零改变年份。
+                if len(issue_clean) == 7 and issue_clean.isdigit():
                     return issue_clean
-                elif len(issue_clean) >= 6:
-                    # 尝试补零到8位
-                    return issue_clean.zfill(8)
             elif self.lottery_type == 'dlt':
                 # 大乐透期号通常是5位数字 (YYNNN)
                 if len(issue_clean) == 5 and issue_clean.isdigit():
@@ -599,4 +596,4 @@ def clean_lottery_data(data: pd.DataFrame,
         (清洗后的数据, 清洗报告)
     """
     cleaner = DataCleaner(lottery_type)
-    return cleaner.clean_data(data, auto_fix, remove_invalid) 
+    return cleaner.clean_data(data, auto_fix, remove_invalid)

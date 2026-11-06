@@ -24,6 +24,8 @@ class RandomGenerator(NumberGenerator):
         Returns:
             生成的号码列表
         """
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise ValueError("生成注数必须为非负整数")
         numbers = []
         for _ in range(count):
             if self.lottery_type == 'dlt':

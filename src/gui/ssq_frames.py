@@ -645,35 +645,53 @@ class SSQHistoryFrame:
                                       bg='#f8f9fa', fg='#212529', insertbackground='#212529')
         self.blue_freq_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
+    def _update_ui_after_query(self, data):
+        """在主线程中更新UI"""
+        # 清空表格
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        # 更新表格
+        for item in data:
+            values = (
+                item['code'],
+                item['date'],
+                item['red'],
+                item['blue'],
+                item['poolmoney'],
+                item['prizegrades'][0]['typenum'],
+                item['prizegrades'][0]['typemoney']
+            )
+            self.tree.insert('', 'end', values=values)
+
+        # 更新统计信息
+        self.update_statistics(data)
+
     def query_history(self, count: int = None):
-        """查询历史开奖数据"""
-        try:
-            # 获取数据
-            analyzer = SSQAnalyzer()
-            data = analyzer.data_fetcher.fetch_history(count)
-            
-            # 清空表格
-            for item in self.tree.get_children():
-                self.tree.delete(item)
+        """查询历史开奖数据 (多线程版本)"""
+        # 如果 count 为 None，从 issue_entry 获取 (虽然原有逻辑没写, 但界面上有输入框)
+        if count is None:
+             try:
+                 issue_text = self.issue_entry.get().strip()
+                 if issue_text:
+                     count = int(issue_text)
+             except ValueError:
+                 pass
+
+        def _query_thread():
+            try:
+                # 获取数据
+                analyzer = SSQAnalyzer()
+                data = analyzer.data_fetcher.fetch_history(count)
                 
-            # 更新表格
-            for item in data:
-                values = (
-                    item['code'],
-                    item['date'],
-                    item['red'],
-                    item['blue'],
-                    item['poolmoney'],
-                    item['prizegrades'][0]['typenum'],
-                    item['prizegrades'][0]['typemoney']
-                )
-                self.tree.insert('', 'end', values=values)
+                # 在主线程更新UI
+                self.parent.after(0, lambda: self._update_ui_after_query(data))
                 
-            # 更新统计信息
-            self.update_statistics(data)
-            
-        except Exception as e:
-            messagebox.showerror("错误", f"获取数据失败: {e}")
+            except Exception as e:
+                self.parent.after(0, lambda: messagebox.showerror("错误", f"获取数据失败: {e}"))
+
+        import threading
+        threading.Thread(target=_query_thread, daemon=True).start()
             
     def update_statistics(self, data: List[dict]):
         """更新统计信息"""

@@ -3,6 +3,7 @@ from typing import Dict, List, Any, Optional
 
 from .base_analyzer import BaseAnalyzer
 from ..exceptions import AnalysisError
+from ..number_data import normalize_number_data
 
 class FrequencyAnalyzer(BaseAnalyzer):
     """频率分析器"""
@@ -23,6 +24,7 @@ class FrequencyAnalyzer(BaseAnalyzer):
             if data is None:
                 data = self.get_recent_data(periods)
             
+            data = normalize_number_data(data, self.lottery_type)
             if not self.validate_data(data):
                 raise AnalysisError("数据验证失败")
             
@@ -165,6 +167,7 @@ class FrequencyAnalyzer(BaseAnalyzer):
             if data is None:
                 data = self.get_recent_data(periods)
             
+            data = normalize_number_data(data, self.lottery_type)
             if not self.validate_data(data):
                 raise AnalysisError("数据验证失败")
             

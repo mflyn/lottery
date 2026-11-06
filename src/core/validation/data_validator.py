@@ -349,9 +349,9 @@ class DataValidator:
         
         # 根据彩票类型验证期号格式
         if self.lottery_type == 'ssq':
-            # 双色球期号应该是8位数字 (YYYYNNN)
-            pattern = r'^\d{8}$'
-            expected_format = "8位数字"
+            # 双色球期号为7位数字 (YYYYNNN)
+            pattern = r'^\d{7}$'
+            expected_format = "7位数字"
         elif self.lottery_type == 'dlt':
             # 大乐透期号应该是5位数字 (YYNNN)
             pattern = r'^\d{5}$'
@@ -760,8 +760,9 @@ class DataValidator:
         try:
             # 提取年份和期号
             issues = data['draw_num'].astype(str)
-            years = issues.str[:4].astype(int)
-            periods = issues.str[4:].astype(int)
+            year_length = 2 if self.lottery_type == 'dlt' else 4
+            years = issues.str[:year_length].astype(int)
+            periods = issues.str[year_length:].astype(int)
             
             # 检查期号连续性
             sequence_issues = []

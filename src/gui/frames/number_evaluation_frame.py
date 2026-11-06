@@ -8,15 +8,21 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import threading
+import queue
 import random
+import json
+import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Any
 
 from src.core.evaluators.ssq_evaluator import SSQNumberEvaluator
 from src.core.evaluators.dlt_evaluator import DLTNumberEvaluator
+from src.core.generators.fusion.history import FusionHistorySnapshot
+from src.core.generators.fusion.result import FusionResult
+from src.gui.fusion_evaluation import FusionEvaluationMixin
 
 
-class NumberEvaluationFrame(ttk.Frame):
+class NumberEvaluationFrame(FusionEvaluationMixin, ttk.Frame):
     """号码评价框架"""
 
     def __init__(self, master, data_manager=None):
@@ -31,8 +37,12 @@ class NumberEvaluationFrame(ttk.Frame):
 
         # 创建评价器
         try:
-            self.ssq_evaluator = SSQNumberEvaluator()
-            self.dlt_evaluator = DLTNumberEvaluator()
+            if data_manager is None:
+                self.ssq_evaluator = SSQNumberEvaluator()
+                self.dlt_evaluator = DLTNumberEvaluator()
+            else:
+                self.ssq_evaluator = SSQNumberEvaluator(str(data_manager.data_files['ssq']))
+                self.dlt_evaluator = DLTNumberEvaluator(str(data_manager.data_files['dlt']))
         except Exception as e:
             messagebox.showerror("初始化错误", f"评价器初始化失败: {str(e)}")
             self.ssq_evaluator = None
@@ -40,9 +50,14 @@ class NumberEvaluationFrame(ttk.Frame):
 
         # 当前评价结果
         self.current_result = None
+        self._evaluation_queue = queue.Queue()
+        self._evaluation_request_id = 0
+        self._closed = threading.Event()
+        self._poll_id = None
 
         # 初始化UI
         self._init_ui()
+        self._check_evaluation_queue()
 
     def refresh_data(self, lottery_type: str = None):
         """刷新评价器的缓存数据（用于数据更新后生效）"""
@@ -240,120 +255,6 @@ class NumberEvaluationFrame(ttk.Frame):
         self.status_label = ttk.Label(btn_frame, text="", foreground='blue')
         self.status_label.pack(side=tk.LEFT, padx=20)
 
-    def _create_scoring_settings_area(self, parent):
-        """创建评分设置区"""
-        frame = ttk.LabelFrame(parent, text="分析设置", padding=10)
-        frame.pack(fill=tk.X, pady=(0, 10))
-
-        # 变量
-        self.analysis_periods_var = tk.StringVar(value="100")
-        self.ssq_freq_blue_weight_var = tk.StringVar(value="0.30")
-        self.ssq_miss_blue_weight_var = tk.StringVar(value="0.30")
-        self.ssq_missing_curve_var = tk.StringVar(value="linear")
-        self.ssq_missing_sigma_var = tk.StringVar(value="1.0")
-
-        # 第0行：分析期数（通用设置）
-        row0 = ttk.Frame(frame)
-        row0.pack(fill=tk.X, pady=2)
-        ttk.Label(row0, text="分析期数:", width=16).pack(side=tk.LEFT)
-        periods_cb = ttk.Combobox(row0, textvariable=self.analysis_periods_var,
-                                  values=["30", "50", "100", "200", "500", "全部"],
-                                  width=10, state="readonly")
-        periods_cb.pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Label(row0, text="(频率分析的历史数据范围)", foreground='gray').pack(side=tk.LEFT)
-
-        # 分隔线
-        ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
-
-        # 双色球专用设置标签
-        ttk.Label(frame, text="双色球专用设置:", font=('Arial', 9, 'bold')).pack(anchor='w')
-
-        row1 = ttk.Frame(frame)
-        row1.pack(fill=tk.X, pady=2)
-        ttk.Label(row1, text="蓝球权重(频率):", width=16).pack(side=tk.LEFT)
-        ttk.Entry(row1, textvariable=self.ssq_freq_blue_weight_var, width=8).pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Label(row1, text="蓝球权重(遗漏):", width=16).pack(side=tk.LEFT)
-        ttk.Entry(row1, textvariable=self.ssq_miss_blue_weight_var, width=8).pack(side=tk.LEFT)
-
-        row2 = ttk.Frame(frame)
-        row2.pack(fill=tk.X, pady=2)
-        ttk.Label(row2, text="遗漏曲线:", width=16).pack(side=tk.LEFT)
-        curve_cb = ttk.Combobox(row2, textvariable=self.ssq_missing_curve_var, values=["linear", "gaussian"], width=10, state="readonly")
-        curve_cb.pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Label(row2, text="σ系数:", width=10).pack(side=tk.LEFT)
-        ttk.Entry(row2, textvariable=self.ssq_missing_sigma_var, width=8).pack(side=tk.LEFT)
-
-        note = ttk.Label(frame, text="注：权重范围0-1；修改后点击“评价号码”生效。", foreground='gray')
-        note.pack(anchor='w', pady=(4, 0))
-
-    def _create_result_display_area(self, parent):
-        """创建结果显示区"""
-        frame = ttk.LabelFrame(parent, text="评价结果", padding=10)
-        frame.pack(fill=tk.X, pady=(0, 10))
-
-        # 左侧：综合得分
-        left_frame = ttk.Frame(frame)
-        left_frame.pack(side=tk.LEFT, padx=20)
-
-        ttk.Label(left_frame, text="综合得分", font=('Arial', 12, 'bold')).pack()
-
-        score_frame = ttk.Frame(left_frame)
-        score_frame.pack(pady=10)
-
-        self.total_score_label = ttk.Label(
-            score_frame,
-            text="--",
-            font=('Arial', 48, 'bold'),
-            foreground='#28a745'
-        )
-        self.total_score_label.pack()
-
-        ttk.Label(score_frame, text="/100", font=('Arial', 16)).pack()
-
-        self.rating_label = ttk.Label(left_frame, text="", font=('Arial', 14))
-        self.rating_label.pack()
-
-        self.stars_label = ttk.Label(left_frame, text="", font=('Arial', 20))
-        self.stars_label.pack()
-
-        # 右侧：各维度得分
-        right_frame = ttk.Frame(frame)
-        right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=20)
-
-        ttk.Label(right_frame, text="各维度得分", font=('Arial', 12, 'bold')).pack(anchor='w', pady=(0, 10))
-
-        self.dimension_labels = {}
-        dimensions = [
-            ('频率得分', 'frequency'),
-            ('遗漏得分', 'missing'),
-            ('模式得分', 'pattern'),
-            ('独特性得分', 'uniqueness')
-        ]
-
-        for dim_name, dim_key in dimensions:
-            dim_frame = ttk.Frame(right_frame)
-            dim_frame.pack(fill=tk.X, pady=3)
-
-            ttk.Label(dim_frame, text=f"{dim_name}:", width=12, font=('Arial', 10)).pack(side=tk.LEFT)
-
-            # 进度条
-            progress = ttk.Progressbar(dim_frame, length=200, mode='determinate')
-            progress.pack(side=tk.LEFT, padx=5)
-
-            # 分数标签
-            label = ttk.Label(dim_frame, text="--", width=15, font=('Arial', 10, 'bold'))
-            label.pack(side=tk.LEFT, padx=5)
-
-            # 图标标签
-            icon_label = ttk.Label(dim_frame, text="", font=('Arial', 12))
-            icon_label.pack(side=tk.LEFT)
-
-            self.dimension_labels[dim_key] = {
-                'progress': progress,
-                'label': label,
-                'icon': icon_label
-            }
-
     def _create_detail_analysis_area(self, parent):
         """创建详细分析区"""
         frame = ttk.LabelFrame(parent, text="详细分析", padding=10)
@@ -504,26 +405,6 @@ class NumberEvaluationFrame(ttk.Frame):
         if self.ssq_evaluator is None:
             raise Exception("双色球评价器未初始化")
 
-        # 应用评分设置到评价器
-        try:
-            fbw = float(self.ssq_freq_blue_weight_var.get())
-            mbw = float(self.ssq_miss_blue_weight_var.get())
-            fbw = max(0.0, min(1.0, fbw))
-            mbw = max(0.0, min(1.0, mbw))
-            curve = (self.ssq_missing_curve_var.get() or 'linear').strip().lower()
-            if curve not in ('linear', 'gaussian'):
-                curve = 'linear'
-            sigma = float(self.ssq_missing_sigma_var.get())
-            sigma = max(0.01, sigma)
-
-            self.ssq_evaluator.freq_blue_weight = fbw
-            self.ssq_evaluator.missing_blue_weight = mbw
-            self.ssq_evaluator.missing_curve = curve
-            self.ssq_evaluator.missing_sigma_factor = sigma
-        except Exception:
-            # 若解析失败，沿用默认配置
-            pass
-
         # 获取分析期数
         periods = self._get_analysis_periods()
 
@@ -535,10 +416,10 @@ class NumberEvaluationFrame(ttk.Frame):
         periods_str = self.analysis_periods_var.get()
         if periods_str == "全部":
             return None  # None 表示使用全部数据
-        try:
-            return int(periods_str)
-        except ValueError:
-            return 100  # 默认100期
+        value=int(periods_str)
+        if value <= 0:
+            raise ValueError('历史期数必须为正整数或全部')
+        return value
 
     def _evaluate_dlt(self):
         """评价大乐透号码"""
@@ -587,107 +468,93 @@ class NumberEvaluationFrame(ttk.Frame):
 
     def _evaluate_async(self, lottery_type, *numbers, periods=100):
         """异步评价号码"""
+        evaluator = self.ssq_evaluator if lottery_type == 'ssq' else self.dlt_evaluator
+        config = self.get_fusion_config(periods)
+        history = evaluator.load_history(force_reload=True)
+        window = max(1,len(history)) if periods is None else periods
+        snapshot = FusionHistorySnapshot.from_data(lottery_type,pd.DataFrame(history),window)
+        self._evaluation_request_id += 1
+        request_id = self._evaluation_request_id
+        self.current_result = None
         # 显示进度
         self.status_label.config(text="⏳ 正在评价中...", foreground='blue')
-        self.total_score_label.config(text="--")
-        self.rating_label.config(text="评价中...")
-        self.stars_label.config(text="")
+        self._reset_score_display(caption='评价中…',detail_status='评价中...')
 
         # 清空详细分析
         self._clear_detail_texts()
 
+        # Capture Python objects only: no worker may call Tk, including after().
+        evaluator = self.ssq_evaluator if lottery_type == 'ssq' else self.dlt_evaluator
+        results = self._evaluation_queue
+        closed = self._closed
+
+        def reference_progress(done,total):
+            if not closed.is_set():
+                results.put((request_id,{'reference_progress':(done,total)},None))
+
         def do_evaluate():
             try:
-                # 调用评价器
-                if lottery_type == 'ssq':
-                    result = self.ssq_evaluator.evaluate(*numbers, periods=periods, force_reload=True)
-                else:
-                    result = self.dlt_evaluator.evaluate(*numbers, periods=periods, force_reload=True)
-
-                # 记录本次评价使用的分析期数，供显示文本使用
-                try:
-                    result['_periods_used'] = periods
-                except Exception:
-                    pass
-
-                # 保存结果
-                self.current_result = {
+                result = evaluator.evaluate(*numbers, config=config, snapshot=snapshot, cancel_event=closed,
+                                            reference_progress=reference_progress)
+                payload = {
                     'lottery_type': lottery_type,
                     'numbers': numbers,
                     'result': result,
-                    'timestamp': datetime.now()
+                    'timestamp': datetime.now(),
                 }
+                error = None
+            except Exception as exc:
+                payload = None
+                error = str(exc)
+            if not closed.is_set():
+                results.put((request_id, payload, error))
 
-                # 更新UI（必须在主线程）
-                self.after(0, lambda: self._update_result_display(result))
-                self.after(0, lambda: self.status_label.config(text="✓ 评价完成", foreground='green'))
+        threading.Thread(target=do_evaluate, daemon=True).start()
 
-            except Exception as e:
-                self.after(0, lambda: self.status_label.config(text=f"✗ 评价失败: {str(e)}", foreground='red'))
-                self.after(0, lambda: messagebox.showerror("评价失败", f"评价过程中出现错误:\n{str(e)}"))
+    def _check_evaluation_queue(self):
+        """Deliver worker results on the UI thread while this page is alive."""
+        self._poll_id = None
+        if self._closed.is_set():
+            return
+        try:
+            while True:
+                request_id, payload, error = self._evaluation_queue.get_nowait()
+                if request_id != self._evaluation_request_id:
+                    continue
+                if payload is not None and 'reference_progress' in payload:
+                    done,total=payload['reference_progress']
+                    self.status_label.config(text=f'随机参照 {done}/{total}（{done/total:.0%}）',foreground='blue')
+                    self.random_reference_caption.config(text='正在计算随机参照…')
+                    continue
+                if error is not None:
+                    self.status_label.config(text=f"✗ 评价失败: {error}", foreground='red')
+                    self.random_reference_caption.config(text='评价失败，请检查输入后重试')
+                    self.rating_label.config(text='评价失败')
+                    messagebox.showerror("评价失败", f"评价过程中出现错误:\n{error}")
+                else:
+                    self.current_result = payload
+                    self._update_result_display(payload['result'])
+                    self.status_label.config(text="✓ 评价完成", foreground='green')
+                if self._closed.is_set():
+                    return
+        except queue.Empty:
+            pass
+        finally:
+            if not self._closed.is_set():
+                self._poll_id = self.after(100, self._check_evaluation_queue)
 
-        # 启动线程
-        thread = threading.Thread(target=do_evaluate, daemon=True)
-        thread.start()
-
-    def _update_result_display(self, result: Dict[str, Any]):
-        """更新结果显示"""
-        # 更新综合得分
-        total_score = result['total_score']
-        self.total_score_label.config(text=f"{total_score:.1f}")
-
-        # 根据得分设置颜色
-        if total_score >= 90:
-            color = '#28a745'  # 绿色
-        elif total_score >= 80:
-            color = '#007bff'  # 蓝色
-        elif total_score >= 70:
-            color = '#ffc107'  # 黄色
-        elif total_score >= 60:
-            color = '#fd7e14'  # 橙色
-        else:
-            color = '#dc3545'  # 红色
-
-        self.total_score_label.config(foreground=color)
-
-        # 更新评级和星级
-        self.rating_label.config(text=result['rating'])
-        self.stars_label.config(text=result['stars'])
-
-        # 更新各维度得分
-        scores = result['scores']
-        for dim_key, widgets in self.dimension_labels.items():
-            score = scores[dim_key]
-
-            # 更新进度条
-            widgets['progress']['value'] = score
-
-            # 更新分数标签
-            widgets['label'].config(text=f"{score:.1f}/100")
-
-            # 更新图标
-            icon = self._get_score_icon(score)
-            widgets['icon'].config(text=icon)
-
-        # 更新详细分析
-        self._update_detail_analysis(result)
-
-    def _get_score_icon(self, score: float) -> str:
-        """根据得分获取图标"""
-        if score >= 90:
-            return '✅'
-        elif score >= 80:
-            return '✅'
-        elif score >= 70:
-            return '✓'
-        elif score >= 60:
-            return '⚠️'
-        else:
-            return '❌'
+    def destroy(self):
+        # Do not join a worker from the UI thread: pending I/O/computation may be
+        # slow. Its completion can safely be discarded without touching Tk.
+        self._closed.set()
+        if self._poll_id is not None:
+            self.after_cancel(self._poll_id)
+            self._poll_id = None
+        super().destroy()
 
     def _update_detail_analysis(self, result: Dict[str, Any]):
         """更新详细分析"""
-        lottery_type = self.lottery_type_var.get()
+        lottery_type = result['fusion']['lottery_type']
 
         # 1. 频率分析
         periods = result.get('_periods_used', None)
@@ -751,6 +618,29 @@ class NumberEvaluationFrame(ttk.Frame):
                 f"偏差 {detail['deviation']:+.1f}%) - "
                 f"{detail['classification']}"
             )
+
+            # 新增：显示所有号码的频率统计
+            if 'all_red_frequencies' in freq_data:
+                lines.append("")
+                lines.append("【所有红球出现频率统计】")
+                lines.append("-" * 40)
+                all_red = freq_data['all_red_frequencies']
+                sorted_red = sorted(all_red.items())
+                for i in range(0, len(sorted_red), 6):
+                    chunk = sorted_red[i:i+6]
+                    line_parts = [f"{num:02d}({freq:2d})" for num, freq in chunk]
+                    lines.append("  " + "  ".join(line_parts))
+
+            if 'all_blue_frequencies' in freq_data:
+                lines.append("")
+                lines.append("【所有蓝球出现频率统计】")
+                lines.append("-" * 40)
+                all_blue = freq_data['all_blue_frequencies']
+                sorted_blue = sorted(all_blue.items())
+                for i in range(0, len(sorted_blue), 6):
+                    chunk = sorted_blue[i:i+6]
+                    line_parts = [f"{num:02d}({freq:2d})" for num, freq in chunk]
+                    lines.append("  " + "  ".join(line_parts))
         else:
             # 大乐透
             lines.append("【前区频率】")
@@ -776,6 +666,29 @@ class NumberEvaluationFrame(ttk.Frame):
                     f"{detail['classification']}"
                 )
 
+            # 新增：显示所有号码的频率统计
+            if 'all_front_frequencies' in freq_data:
+                lines.append("")
+                lines.append("【所有前区出现频率统计】")
+                lines.append("-" * 40)
+                all_front = freq_data['all_front_frequencies']
+                sorted_front = sorted(all_front.items())
+                for i in range(0, len(sorted_front), 6):
+                    chunk = sorted_front[i:i+6]
+                    line_parts = [f"{num:02d}({freq:2d})" for num, freq in chunk]
+                    lines.append("  " + "  ".join(line_parts))
+
+            if 'all_back_frequencies' in freq_data:
+                lines.append("")
+                lines.append("【所有后区出现频率统计】")
+                lines.append("-" * 40)
+                all_back = freq_data['all_back_frequencies']
+                sorted_back = sorted(all_back.items())
+                for i in range(0, len(sorted_back), 6):
+                    chunk = sorted_back[i:i+6]
+                    line_parts = [f"{num:02d}({freq:2d})" for num, freq in chunk]
+                    lines.append("  " + "  ".join(line_parts))
+
         lines.append("")
         lines.append("=" * 80)
         return "\n".join(lines)
@@ -784,7 +697,7 @@ class NumberEvaluationFrame(ttk.Frame):
         """格式化遗漏分析"""
         lines = []
         lines.append("=" * 80)
-        lines.append("遗漏分析（当前遗漏期数）")
+        lines.append("遗漏分析（同一历史快照；标记观察下界的数值表示至少）")
         lines.append("=" * 80)
         lines.append("")
 
@@ -945,17 +858,17 @@ class NumberEvaluationFrame(ttk.Frame):
         """格式化历史对比"""
         lines = []
         lines.append("=" * 80)
-        lines.append("历史对比")
+        lines.append(f"历史对比（所选范围：{historical_data['observed_periods']} 条记录）")
         lines.append("=" * 80)
         lines.append("")
 
         # 完全匹配
         if historical_data['exact_match']:
-            lines.append(f"⚠️  警告: 这注号码在历史上完全出现过！")
+            lines.append("这注号码在所选历史范围内有完全匹配记录。")
             lines.append(f"   期号: {historical_data['exact_match_period']}")
             lines.append("")
         else:
-            lines.append("✅ 这注号码从未完全出现过")
+            lines.append("这注号码在所选历史范围内未完全出现过。")
             lines.append("")
 
         # 匹配统计
@@ -1020,14 +933,7 @@ class NumberEvaluationFrame(ttk.Frame):
 
     def _clear_results(self):
         """清空结果显示"""
-        self.total_score_label.config(text="--", foreground='#28a745')
-        self.rating_label.config(text="")
-        self.stars_label.config(text="")
-
-        for widgets in self.dimension_labels.values():
-            widgets['progress']['value'] = 0
-            widgets['label'].config(text="--")
-            widgets['icon'].config(text="")
+        self._reset_score_display()
 
         self._clear_detail_texts()
         self.current_result = None
@@ -1049,7 +955,7 @@ class NumberEvaluationFrame(ttk.Frame):
             filename = filedialog.asksaveasfilename(
                 title="导出评价报告",
                 defaultextension=".md",
-                filetypes=[("Markdown文件", "*.md"), ("文本文件", "*.txt"), ("所有文件", "*.*")],
+                filetypes=[("Markdown文件", "*.md"), ("完整复现JSON", "*.json"), ("文本文件", "*.txt"), ("所有文件", "*.*")],
                 initialfile=f"号码评价报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
             )
 
@@ -1057,7 +963,7 @@ class NumberEvaluationFrame(ttk.Frame):
                 return
 
             # 生成报告内容
-            report = self._generate_report()
+            report = json.dumps(self.current_result['result']['fusion'],ensure_ascii=False,indent=2,allow_nan=False) if filename.lower().endswith('.json') else self._generate_report()
 
             # 保存文件
             with open(filename, 'w', encoding='utf-8') as f:
@@ -1095,22 +1001,9 @@ class NumberEvaluationFrame(ttk.Frame):
             lines.append(f"**后区**: {' '.join(f'{n:02d}' for n in numbers[1])}")
         lines.append("")
 
-        # 综合评分
-        lines.append("## 综合评分")
-        lines.append("")
-        lines.append(f"**总分**: {eval_result['total_score']:.1f}/100")
-        lines.append(f"**评级**: {eval_result['rating']} {eval_result['stars']}")
-        lines.append("")
-
-        # 各维度得分
-        lines.append("### 各维度得分")
-        lines.append("")
-        scores = eval_result['scores']
-        lines.append(f"- **频率得分**: {scores['frequency']:.1f}/100")
-        lines.append(f"- **遗漏得分**: {scores['missing']:.1f}/100")
-        lines.append(f"- **模式得分**: {scores['pattern']:.1f}/100")
-        lines.append(f"- **独特性得分**: {scores['uniqueness']:.1f}/100")
-        lines.append("")
+        lines.append(FusionResult.from_dict(eval_result['fusion']).to_markdown())
+        lines.append('单注 K=1，D=0；F 按同一快照和参数计算。')
+        lines.append('')
 
         # 详细分析
         lines.append("## 详细分析")

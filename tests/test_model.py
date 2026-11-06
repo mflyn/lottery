@@ -50,10 +50,15 @@ class TestModelPipeline(unittest.TestCase):
         self.ensemble.build_ensemble()
         
         # 评估模型
-        scores = self.ensemble.evaluate_ensemble(self.X, self.y)
+        features = self.preprocessor.preprocess_data(
+            self.X, categorical_columns=['feature3'], numerical_columns=['feature1', 'feature2']
+        )
+        scores = self.ensemble.evaluate_ensemble(features, self.y)
         
         self.assertIn('mean_mse', scores)
         self.assertIn('std_mse', scores)
+        self.assertEqual(len(scores['mse_scores']), 5)
+        self.assertTrue(np.isfinite(scores['mse_scores']).all())
         
     def test_model_interpretation(self):
         """测试模型解释"""

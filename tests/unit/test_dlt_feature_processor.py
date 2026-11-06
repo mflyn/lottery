@@ -29,11 +29,18 @@ class TestDLTFeatureProcessor(unittest.TestCase):
         """测试高级特征提取"""
         features = self.processor.extract_advanced_features(self.test_data)
         
-        self.assertIn('front_gaps', features.columns)
-        self.assertIn('back_gaps', features.columns)
-        self.assertIn('front_patterns', features.columns)
-        self.assertIn('back_patterns', features.columns)
-        
+        self.assertEqual(features['front_gaps_mean'].tolist(), [1.0, 1.0])
+        self.assertEqual(features['front_gaps_std'].tolist(), [0.0, 0.0])
+        self.assertEqual(features['back_gaps_mean'].tolist(), [1.0, 1.0])
+        self.assertEqual(features['consecutive_count'].tolist(), [4, 4])
+        self.assertEqual(features['span'].tolist(), [4, 4])
+
+    def test_advanced_features_preserve_custom_index(self):
+        self.test_data.index = [42, 43]
+        features = self.processor.extract_advanced_features(self.test_data)
+        self.assertEqual(features.index.tolist(), [42, 43])
+        self.assertFalse(features.isna().any().any())
+
     def test_invalid_input(self):
         """测试无效输入处理"""
         invalid_data = pd.DataFrame({

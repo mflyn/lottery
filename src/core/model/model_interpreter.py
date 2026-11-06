@@ -1,8 +1,6 @@
 from typing import Dict, List
 import numpy as np
 import pandas as pd
-import shap
-from lime import lime_tabular
 import matplotlib.pyplot as plt
 
 class ModelInterpreter:
@@ -15,6 +13,8 @@ class ModelInterpreter:
         
     def explain_global(self, X: pd.DataFrame) -> Dict:
         """全局解释"""
+        import shap
+
         # 计算SHAP值
         explainer = shap.TreeExplainer(self.model)
         self.shap_values = explainer.shap_values(X)
@@ -31,6 +31,8 @@ class ModelInterpreter:
     def explain_local(self, X: pd.DataFrame, 
                      instance_index: int) -> Dict:
         """局部解释"""
+        from lime import lime_tabular
+
         # 使用LIME进行局部解释
         explainer = lime_tabular.LimeTabularExplainer(
             X.values,
@@ -52,6 +54,8 @@ class ModelInterpreter:
         """绘制特征重要性图"""
         if self.shap_values is None:
             raise ValueError("Run explain_global first")
+
+        import shap
             
         shap.summary_plot(self.shap_values, 
                          feature_names=self.feature_names,

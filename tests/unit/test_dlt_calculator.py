@@ -62,28 +62,28 @@ class TestDLTCalculator(unittest.TestCase):
         # 一等奖
         level, prize = self.calculator.check_prize([1,2,3,4,5,1,2], [1,2,3,4,5,1,2])
         self.assertEqual(level, 1)
-        self.assertTrue(prize > 0)
-        # 九等奖（前区0+后区2）
+        self.assertIsNone(prize)
+        # 七等奖（前区0+后区2）
         level, prize = self.calculator.check_prize([11,12,13,14,15,1,2], [1,2,3,4,5,1,2])
-        self.assertEqual(level, 9)
-        # 九等奖（前区1+后区2）
+        self.assertEqual(level, 7)
+        # 七等奖（前区1+后区2）
         level, prize = self.calculator.check_prize([1,12,13,14,15,1,2], [1,2,3,4,5,1,2])
-        self.assertEqual(level, 9)
-        # 九等奖（前区2+后区1）
+        self.assertEqual(level, 7)
+        # 七等奖（前区2+后区1）
         level, prize = self.calculator.check_prize([1,2,13,14,15,1,3], [1,2,3,4,5,1,2])
-        self.assertEqual(level, 9)
-        # 九等奖（前区3+后区0）
+        self.assertEqual(level, 7)
+        # 七等奖（前区3+后区0）
         level, prize = self.calculator.check_prize([1,2,3,14,15,3,4], [1,2,3,4,5,1,2])
-        self.assertEqual(level, 9)
+        self.assertEqual(level, 7)
         # 未中奖
         level, prize = self.calculator.check_prize([6,7,8,9,10,11,12], [1,2,3,4,5,1,2])
         self.assertEqual(level, 0)
 
     def test_check_prize_additional(self):
         # 一等奖追加
-        level, prize = self.calculator.check_prize([1,2,3,4,5,1,2], [1,2,3,4,5,1,2], is_additional=True)
+        level, prize = self.calculator.check_prize([1,2,3,4,5,1,2], [1,2,3,4,5,1,2], is_additional=True, floating_prizes={1: 8000000})
         self.assertEqual(level, 1)
-        self.assertTrue(prize > 10000000)
+        self.assertEqual(prize, 14400000)
 
 if __name__ == '__main__':
     unittest.main() 

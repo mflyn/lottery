@@ -5,9 +5,11 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 import time
+import tempfile
 from .config_manager import get_config_manager
 from .network_client import get_network_client
 from .validation import DataValidator, DataCleaner
+from .validation.import_normalizer import normalize_import_data
 from .api_parsers import get_parser
 
 class LotteryDataManager:
@@ -563,112 +565,75 @@ class LotteryDataManager:
             return False
 
     def import_data(self, file_path: str, lottery_type: str) -> bool:
-        """导入数据 (支持 JSON, CSV, Excel)
-        Args:
-            file_path: 导入文件路径
-            lottery_type: 彩票类型
-        Returns:
-            导入是否成功
-        """
-        file_path_obj = Path(file_path)
-        if not file_path_obj.exists():
-            self.logger.error(f"导入文件不存在: {file_path}")
+        """校验并导入整个批次；失败时保留原历史文件。"""
+        source = Path(file_path)
+        if lottery_type not in self.LOTTERY_TYPES or not source.is_file():
+            self.logger.error("导入文件不存在或彩种不受支持: %s, %s", source, lottery_type)
             return False
 
+        temporary_path = None
         try:
-            imported_data_list = []
-            if file_path.endswith('.json'):
-                with open(file_path_obj, 'r', encoding='utf-8') as f:
-                    imported_raw_data = json.load(f)
-                # 假设导入的 JSON 也有 'data' 键
-                imported_data_list = imported_raw_data.get('data', [])
-                if not imported_data_list and isinstance(imported_raw_data, list):
-                     # 如果直接是列表，则使用整个列表
-                     imported_data_list = imported_raw_data
-            elif file_path.endswith('.csv'):
-                df = pd.read_csv(file_path_obj)
-                # 需要将 DataFrame 转换为字典列表，并处理号码列
-                # TODO: 实现 CSV 到字典列表的转换，确保号码格式正确
-                self.logger.warning("从 CSV 导入数据的功能暂未完全实现号码格式转换。")
-                imported_data_list = df.to_dict('records')
-            elif file_path.endswith(('.xlsx', '.xls')):
-                df = pd.read_excel(file_path_obj)
-                # TODO: 实现 Excel 到字典列表的转换
-                self.logger.warning("从 Excel 导入数据的功能暂未完全实现号码格式转换。")
-                imported_data_list = df.to_dict('records')
+            suffix = source.suffix.lower()
+            if suffix == '.json':
+                with source.open('r', encoding='utf-8') as stream:
+                    raw = json.load(stream)
+                records = raw.get('data', []) if isinstance(raw, dict) else raw
+            elif suffix == '.csv':
+                table = pd.read_csv(source, dtype={'draw_num': str, 'issue': str})
+                records = table.astype(object).where(table.notna(), None).to_dict('records')
+            elif suffix in ('.xlsx', '.xls'):
+                table = pd.read_excel(source, dtype={'draw_num': str, 'issue': str})
+                records = table.astype(object).where(table.notna(), None).to_dict('records')
             else:
-                raise ValueError("不支持的导入文件格式")
+                raise ValueError('不支持的导入文件格式')
 
-            if not imported_data_list:
-                 self.logger.warning(f"从 {file_path} 未能解析出数据列表。")
-                 return False
+            imported = normalize_import_data(records, lottery_type)
+            if not self._validate_data_format(imported, lottery_type):
+                raise ValueError('导入数据校验失败')
 
-            # TODO: 添加更严格的数据格式验证 _validate_data_format
-
-            # 合并现有数据 (与 update_data 逻辑类似)
-            target_file_path = self.data_files[lottery_type]
-            existing_data_list = []
-            if target_file_path.exists():
-                try:
-                    with open(target_file_path, 'r', encoding='utf-8') as f:
-                        existing_raw_data = json.load(f)
-                    existing_data_list = existing_raw_data.get('data', [])
-                except Exception as e:
-                    self.logger.warning(f"读取现有数据文件 {target_file_path} 出错: {e}，将覆盖。")
-
-            combined_data_dict = {item['draw_num']: item for item in existing_data_list}
+            target = self.data_files[lottery_type]
+            existing = []
+            if target.exists():
+                with target.open('r', encoding='utf-8') as stream:
+                    existing = json.load(stream)['data']
+                if not isinstance(existing, list):
+                    raise ValueError('现有历史数据格式错误')
+            combined = {str(row['draw_num']): row for row in existing}
             imported_count = 0
-            for item in imported_data_list:
-                # 基本检查，确保有期号
-                if isinstance(item, dict) and 'draw_num' in item:
-                    if item['draw_num'] not in combined_data_dict:
-                        # TODO: 更严格的格式校验，确保存入的数据包含所有必需字段和正确类型
-                        combined_data_dict[item['draw_num']] = item
-                        imported_count += 1
-                else:
-                    self.logger.warning(f"跳过无效的导入数据项: {item}")
+            for row in imported.to_dict('records'):
+                if row['draw_num'] not in combined:
+                    combined[row['draw_num']] = row
+                    imported_count += 1
+            if imported_count == 0:
+                self.logger.info('导入数据均已存在，历史文件保持不变。')
+                return True
 
-            final_data_list = list(combined_data_dict.values())
-            final_data_list.sort(key=lambda x: x.get('draw_num', '0'), reverse=True)
-
-            output_data = {
-                'fetch_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'total_periods': len(final_data_list),
-                'data': final_data_list
-            }
-
-            with open(target_file_path, 'w', encoding='utf-8') as f:
-                json.dump(output_data, f, ensure_ascii=False, indent=2)
-
-            self.logger.info(f"成功从 {file_path} 导入 {imported_count} 条新记录到 {target_file_path}。")
+            final_rows = sorted(combined.values(), key=lambda row: int(row['draw_num']), reverse=True)
+            output = {'fetch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                      'total_periods': len(final_rows), 'data': final_rows}
+            # Serialize in the same directory so a failed write cannot truncate history.
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=target.parent,
+                                             prefix=target.stem + '-', suffix='.tmp', delete=False) as stream:
+                temporary_path = Path(stream.name)
+                json.dump(output, stream, ensure_ascii=False, indent=2, allow_nan=False)
+            temporary_path.replace(target)
+            self.logger.info('导入 %s 条新记录到 %s', imported_count, target)
             return True
-
-        except Exception as e:
-            self.logger.error(f"导入数据失败: {str(e)}", exc_info=True)
+        except Exception as exc:
+            self.logger.error('导入数据失败: %s', exc, exc_info=True)
             return False
+        finally:
+            if temporary_path is not None and temporary_path.exists():
+                temporary_path.unlink()
 
     def _validate_data_format(self, data: pd.DataFrame, lottery_type: str) -> bool:
-        """验证数据格式"""
-        required_columns = {
-            'ssq': ['date', 'issue', 'numbers', 'prize_pool', 'sales'],
-            'dlt': ['date', 'issue', 'numbers', 'prize_pool', 'sales']
-        }
-
-        # 检查必需列
-        if not all(col in data.columns for col in required_columns[lottery_type]):
+        """使用统一验证器检查规范化后的历史记录。"""
+        if lottery_type not in self.validators:
             return False
-
-        # 验证日期格式
-        try:
-            pd.to_datetime(data['date'])
-        except ValueError:
-            return False
-
-        # 验证期号格式
-        if not data['issue'].astype(str).str.match(r'^\d{8}$').all():
-            return False
-
-        return True
+        report = self.validators[lottery_type].validate(data)
+        if not report['valid']:
+            self.logger.warning('导入记录校验失败: %s', report['errors'])
+        return report['valid']
 
     def validate_data(self, lottery_type: str, data: pd.DataFrame = None) -> Dict[str, Any]:
         """验证数据质量
@@ -814,7 +779,10 @@ class LotteryDataManager:
                 return {}
 
             if start_date:
-                data = data[data['date'] >= start_date]
+                data = data[data['draw_date'] >= start_date]
+
+            if data.empty:
+                return {}
 
             # 计算基础统计数据
             stats = {
@@ -823,8 +791,8 @@ class LotteryDataManager:
                 'avg_sales': data['sales'].mean(),
                 'total_prize': data['prize_pool'].sum(),
                 'avg_prize': data['prize_pool'].mean(),
-                'last_updated': data['date'].max().strftime('%Y-%m-%d'),
-                'first_period': data['date'].min().strftime('%Y-%m-%d')
+                'last_updated': data['draw_date'].max().strftime('%Y-%m-%d'),
+                'first_period': data['draw_date'].min().strftime('%Y-%m-%d')
             }
 
             return stats

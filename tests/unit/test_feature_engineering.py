@@ -12,17 +12,12 @@ class TestFeatureEngineering(unittest.TestCase):
         """测试基础特征生成"""
         # 创建测试数据
         np.random.seed(42)  # 设置随机种子以保证结果可重现
-        test_data = pd.DataFrame({
-            'date': pd.date_range(start='2023-01-01', periods=20),
-            'red_1': np.random.randint(1, 34, 20),
-            'red_2': np.random.randint(1, 34, 20),
-            'red_3': np.random.randint(1, 34, 20),
-            'red_4': np.random.randint(1, 34, 20),
-            'red_5': np.random.randint(1, 34, 20),
-            'red_6': np.random.randint(1, 34, 20),
-            'blue': np.random.randint(1, 17, 20)
-        })
-        
+        rng = np.random.default_rng(42)
+        red_rows = np.array([sorted(rng.choice(np.arange(1, 34), size=6, replace=False)) for _ in range(20)])
+        test_data = pd.DataFrame(red_rows, columns=[f'red_{i+1}' for i in range(6)])
+        test_data['date'] = pd.date_range(start='2023-01-01', periods=20)
+        test_data['blue'] = rng.integers(1, 17, 20)
+
         # 执行特征生成
         result = self.feature_engineering.generate_features(test_data)
         
@@ -42,8 +37,8 @@ class TestFeatureEngineering(unittest.TestCase):
         self.assertTrue(all(feature in result.columns for feature in expected_features))
         
         # 验证特征值范围
-        self.assertTrue(all(result['red_sum'] >= 6))  # 最小和为6个1
-        self.assertTrue(all(result['red_sum'] <= 198))  # 最大和为6个33
+        self.assertTrue(all(result['red_sum'] >= 21))  # 1+2+3+4+5+6
+        self.assertTrue(all(result['red_sum'] <= 183))  # 28+29+30+31+32+33
         self.assertTrue(all(result['red_odd_count'] >= 0))
         self.assertTrue(all(result['red_odd_count'] <= 6))
         self.assertTrue(all(result['red_even_count'] >= 0))

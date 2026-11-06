@@ -1,4 +1,7 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
+from numbers import Integral
+import math
+import re
 from dataclasses import dataclass
 from itertools import combinations
 from src.utils.logger import Logger
@@ -21,22 +24,19 @@ class DLTCalculator(BaseCalculator):
     继承自 BaseCalculator 基类。
     """
 
-    # 奖级设置
+    # Official 2026 rules apply from issue 26014. Floating amounts require draw data.
     PRIZE_LEVELS = {
-        # (前区命中数, 后区命中数): [奖级, 基本奖金, 追加奖金]
-        (5, 2): [1, 10000000, 8000000],  # 一等奖
-        (5, 1): [2, 250000, 200000],     # 二等奖
-        (5, 0): [3, 10000, 8000],        # 三等奖
-        (4, 2): [4, 3000, 2400],         # 四等奖
-        (4, 1): [5, 300, 240],           # 五等奖
-        (3, 2): [6, 200, 160],           # 六等奖
-        (4, 0): [7, 100, 80],            # 七等奖
-        (3, 1): [8, 15, 12],             # 八等奖
-        (2, 2): [8, 15, 12],             # 八等奖
-        (3, 0): [9, 5, 0],               # 九等奖
-        (1, 2): [9, 5, 0],               # 九等奖
-        (2, 1): [9, 5, 0],               # 九等奖
-        (0, 2): [9, 5, 0],               # 九等奖
+        (5, 2): (1, None, 0), (5, 1): (2, None, 0),
+        (5, 0): (3, 5000, 0), (4, 2): (3, 5000, 0),
+        (4, 1): (4, 300, 0), (4, 0): (5, 150, 0), (3, 2): (5, 150, 0),
+        (3, 1): (6, 15, 0), (2, 2): (6, 15, 0),
+        (3, 0): (7, 5, 0), (2, 1): (7, 5, 0), (1, 2): (7, 5, 0), (0, 2): (7, 5, 0),
+    }
+    LEGACY_PRIZE_LEVELS = {
+        (5, 2): (1, None, 0), (5, 1): (2, None, 0), (5, 0): (3, 10000, 0),
+        (4, 2): (4, 3000, 0), (4, 1): (5, 300, 0), (3, 2): (6, 200, 0),
+        (4, 0): (7, 100, 0), (3, 1): (8, 15, 0), (2, 2): (8, 15, 0),
+        (3, 0): (9, 5, 0), (2, 1): (9, 5, 0), (1, 2): (9, 5, 0), (0, 2): (9, 5, 0),
     }
 
     def __init__(self, config_manager=None):
@@ -56,6 +56,15 @@ class DLTCalculator(BaseCalculator):
             self.basic_price = 2    # 默认基本投注每注2元
             self.additional_price = 1  # 默认追加投注每注1元
         
+        # 2026新规：当奖池 >= 8亿元时，固定奖奖金上调 (3-7等奖)
+        self.high_pool_prizes = {
+            3: (6666, 0),
+            4: (380, 0),
+            5: (200, 0),
+            6: (18, 0),
+            7: (7, 0)
+        }
+
     def validate_numbers(self, numbers: List[int], area: str) -> bool:
         """验证号码是否有效
         
@@ -212,75 +221,152 @@ class DLTCalculator(BaseCalculator):
                 all_combinations.append(sorted(front) + sorted(back))
         return all_combinations
 
-    def check_prize(self, 
-                   bet_numbers: List[int], 
-                   draw_numbers: List[int],
-                   is_additional: bool = False) -> Tuple[int, float]:
-        """检查单注中奖情况
+    @staticmethod
+    def _canonical_issue(draw_issue) -> Optional[str]:
+        if draw_issue is None:
+            return None
+        issue = str(draw_issue).strip()
+        if re.fullmatch(r'20[0-9]{5}', issue):
+            issue = issue[2:]
+        if not re.fullmatch(r'[0-9]{5}', issue) or int(issue[-3:]) == 0:
+            raise ValueError('大乐透期号必须为YYNNN或20YYNNN')
+        return issue
 
-        Args:
-            bet_numbers: 单注投注号码(前5个为前区号码,后2个为后区号码)
-            draw_numbers: 开奖号码(前5个为前区号码,后2个为后区号码)
-            is_additional: 是否追加投注
+    @classmethod
+    def get_prize_levels(cls, draw_issue=None) -> Dict:
+        issue = cls._canonical_issue(draw_issue)
+        if issue is None or int(issue) >= 26014:
+            return cls.PRIZE_LEVELS
+        if int(issue) >= 19019:
+            return cls.LEGACY_PRIZE_LEVELS
+        raise ValueError('暂不支持19019期之前的大乐透兑奖规则')
 
-        Returns:
-            (奖级, 奖金)
+    def get_prize_amount(self, level: int, is_additional: bool = False,
+                         prize_pool: Optional[float] = 0.0, *, draw_issue=None,
+                         floating_prizes: Optional[Dict[int, float]] = None) -> Optional[float]:
+        """固定奖按开奖前奖池计算；浮动奖金额缺失时返回None，不作金额假设。"""
+        table = self.get_prize_levels(draw_issue)
+        if prize_pool is not None and (not math.isfinite(prize_pool) or prize_pool < 0):
+            raise ValueError('开奖前奖池必须为非负有限数值')
+        if level == 0:
+            return 0.0
+        if level in (1, 2):
+            basic = (floating_prizes or {}).get(level)
+            if basic is None:
+                return None
+            if isinstance(basic, bool) or not math.isfinite(basic) or basic <= 0 or int(basic) != basic:
+                raise ValueError('官方浮动奖单注奖金必须为正整数元')
+            basic = int(basic)
+            return basic + (basic * 8 // 10 if is_additional else 0)
+        for award, basic, _ in table.values():
+            if award == level:
+                if table is self.PRIZE_LEVELS:
+                    if prize_pool is None:
+                        return None
+                    if prize_pool >= 800000000:
+                        basic = self.high_pool_prizes[level][0]
+                return basic
+        raise ValueError(f'奖级不适用于所选期号: {level}')
+
+    @staticmethod
+    def _validate_ticket(numbers):
+        if not isinstance(numbers, (list, tuple)) or len(numbers) != 7:
+            raise ValueError('单注号码必须为5个前区和2个后区号码')
+        for area, count, maximum in [(numbers[:5], 5, 35), (numbers[5:], 2, 12)]:
+            if (len(set(area)) != count or any(isinstance(n, bool) or not isinstance(n, Integral)
+                                              or not 1 <= n <= maximum for n in area)):
+                raise ValueError('号码重复或超出有效范围')
+
+    def check_prize(self, bet_numbers: List[int], draw_numbers: List[int],
+                    is_additional: bool = False, prize_pool: Optional[float] = 0.0, *,
+                    draw_issue=None, floating_prizes: Optional[Dict[int, float]] = None) -> Tuple[int, Optional[float]]:
+        """核对单注。默认采用26014期起规则；缺少官方浮动奖金额时奖金为None。
+
+        prize_pool是开奖前奖池；默认0只用于低奖池条件试算，不代表某期开奖金额。
         """
-        # 分离前后区号码
-        bet_front = set(bet_numbers[:5])
-        bet_back = set(bet_numbers[5:])
-        draw_front = set(draw_numbers[:5])
-        draw_back = set(draw_numbers[5:])
+        self._validate_ticket(bet_numbers)
+        self._validate_ticket(draw_numbers)
+        table = self.get_prize_levels(draw_issue)
+        matches = (len(set(bet_numbers[:5]) & set(draw_numbers[:5])),
+                   len(set(bet_numbers[5:]) & set(draw_numbers[5:])))
+        level = table.get(matches, (0, 0, 0))[0]
+        return level, self.get_prize_amount(level, is_additional, prize_pool,
+                                             draw_issue=draw_issue, floating_prizes=floating_prizes)
 
-        # 计算前后区匹配数
-        front_matches = len(bet_front & draw_front)
-        back_matches = len(bet_back & draw_back)
+    def check_complex_prize(self, front_numbers: List[int], back_numbers: List[int], draw_numbers: List[int],
+                            is_additional: bool = False, prize_pool: Optional[float] = 0.0, *,
+                            draw_issue=None, floating_prizes=None) -> Dict[int, int]:
+        return self._summarize_prizes(self._generate_complex_combinations(front_numbers, back_numbers),
+                                     draw_numbers, is_additional, prize_pool, draw_issue, floating_prizes)
 
-        # 查找中奖等级和奖金
-        prize_key = (front_matches, back_matches)
-        if prize_key in self.PRIZE_LEVELS:
-            level, basic, additional = self.PRIZE_LEVELS[prize_key]
-            prize = basic + (additional if is_additional else 0)
-            return level, prize
-        return 0, 0  # 未中奖
+    def check_dantuo_prize(self, front_dan: List[int], front_tuo: List[int], back_dan: List[int],
+                          back_tuo: List[int], draw_numbers: List[int], is_additional: bool = False,
+                          prize_pool: Optional[float] = 0.0, *, draw_issue=None, floating_prizes=None) -> Dict[int, int]:
+        bets = self._generate_dantuo_combinations(front_dan, front_tuo, back_dan, back_tuo)
+        return self._summarize_prizes(bets, draw_numbers, is_additional, prize_pool, draw_issue, floating_prizes)
 
-    def check_complex_prize(self, front_numbers: List[int], back_numbers: List[int], draw_numbers: List[int], is_additional: bool = False) -> Dict[int, int]:
-        """检查复式投注的中奖情况
+    def _summarize_prizes(self, bets, draw, additional, pool, issue, floating):
+        summary = {level: 0 for level in sorted({entry[0] for entry in self.get_prize_levels(issue).values()})}
+        for bet in bets:
+            level, _ = self.check_prize(bet, draw, additional, pool, draw_issue=issue, floating_prizes=floating)
+            if level:
+                summary[level] += 1
+        return summary
 
-        Args:
-            front_numbers: 复式前区
-            back_numbers: 复式后区
-            draw_numbers: 开奖号码
-            is_additional: 是否追加
+    @classmethod
+    def get_draw_context(cls, history, draw_issue, draw_numbers) -> Dict:
+        """从匹配的历史记录取官方奖金，从紧邻上一期的余额取开奖前奖池。"""
+        issue = cls._canonical_issue(draw_issue)
+        context = {'draw_issue': issue, 'prize_pool': None, 'floating_prizes': {}}
+        cls.get_prize_levels(issue)
+        if issue is None or history is None:
+            return context
+        records = history.to_dict('records') if hasattr(history, 'to_dict') else history
+        by_issue = {}
+        for row in records:
+            try:
+                key = cls._canonical_issue(row.get('draw_num'))
+                by_issue[key] = row
+            except (TypeError, ValueError):
+                continue
+        current = by_issue.get(issue)
+        if not current:
+            return context
+        front, back = current.get('front_numbers'), current.get('back_numbers')
+        if not isinstance(front, (list, tuple)) or not isinstance(back, (list, tuple)):
+            return context
+        if sorted(front) + sorted(back) != sorted(draw_numbers[:5]) + sorted(draw_numbers[5:]):
+            return context
+        for level, field in [(1, 'first_prize_amount'), (2, 'second_prize_amount')]:
+            amount = current.get(field)
+            if isinstance(amount, (int, float)) and math.isfinite(amount) and amount > 0:
+                context['floating_prizes'][level] = amount
+        previous = by_issue.get(f'{int(issue) - 1:05d}') if int(issue[-3:]) > 1 else None
+        if previous:
+            pool = previous.get('prize_pool')
+            # History loading also uses zero for missing/unparseable pool values.
+            # Without provenance, zero cannot be treated as a verified official balance.
+            if isinstance(pool, (int, float)) and math.isfinite(pool) and pool > 0:
+                context['prize_pool'] = pool
+        return context
 
-        Returns:
-            一个字典，键是奖级，值是该奖级的注数。例如 {1: 0, 4: 2, 8: 10}
-        """
-        all_bets = self._generate_complex_combinations(front_numbers, back_numbers)
-        prize_summary = {level: 0 for level in range(1, 10)} # DLT 奖级 1-9
-
-        for bet in all_bets:
-            level, _ = self.check_prize(bet, draw_numbers, is_additional)
-            if level > 0:
-                prize_summary[level] += 1
-        return prize_summary
-
-    def check_dantuo_prize(self, front_dan: List[int], front_tuo: List[int], back_dan: List[int], back_tuo: List[int], draw_numbers: List[int], is_additional: bool = False) -> Dict[int, int]:
-        """检查胆拖投注的中奖情况
-
-        Args:
-            (胆拖号码...)
-            draw_numbers: 开奖号码
-            is_additional: 是否追加
-
-        Returns:
-            一个字典，键是奖级，值是该奖级的注数。
-        """
-        all_bets = self._generate_dantuo_combinations(front_dan, front_tuo, back_dan, back_tuo)
-        prize_summary = {level: 0 for level in range(1, 10)} # DLT 奖级 1-9
-
-        for bet in all_bets:
-            level, _ = self.check_prize(bet, draw_numbers, is_additional)
-            if level > 0:
-                prize_summary[level] += 1
-        return prize_summary
+    def format_prize_summary(self, summary: Dict[int, int], check_type: str = '单式',
+                             is_additional: bool = False, **context) -> str:
+        lines = [f"{check_type}中奖结果 ({'追加' if is_additional else '基本'}):"]
+        total, unknown = 0, False
+        for level, count in sorted(summary.items()):
+            if not count:
+                continue
+            amount = self.get_prize_amount(level, is_additional, **context)
+            if amount is None:
+                unknown = True
+                reason = '浮动奖金额以当期开奖公告为准' if level in (1, 2) else '缺少开奖前奖池，金额待核实'
+                lines.append(f'  - {level}等奖: {count} 注，{reason}')
+            else:
+                lines.append(f'  - {level}等奖: {count} 注 x {amount} 元')
+                total += count * amount
+        if unknown:
+            lines.append(f'总计: {sum(summary.values())} 注，已知奖金小计: {total} 元，部分奖金待核实')
+        else:
+            lines.append(f'总计: {sum(summary.values())} 注，总奖金: {total} 元')
+        return '\n'.join(lines)

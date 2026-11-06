@@ -9,74 +9,25 @@ from typing import Dict, List, Tuple, Any
 from collections import Counter
 import numpy as np
 from .base_evaluator import BaseNumberEvaluator
+from .fusion_evaluation import FusionEvaluationMixin, DEFAULT_PERIODS, DEFAULT_REFERENCE
 
 
-class DLTNumberEvaluator(BaseNumberEvaluator):
+class DLTNumberEvaluator(FusionEvaluationMixin, BaseNumberEvaluator):
     """大乐透号码评价器"""
     
-    def __init__(self, history_file: str = 'data/dlt_history.json'):
-        """初始化大乐透评价器
-        
-        Args:
-            history_file: 历史数据文件路径
-        """
+    def __init__(self, history_file='data/dlt_history.json'):
         super().__init__(history_file)
-        self.front_range = (1, 35)  # 前区范围
-        self.back_range = (1, 12)   # 后区范围
-        self.front_count = 5  # 前区数量
-        self.back_count = 2   # 后区数量
-    
-    def evaluate(self, front_numbers: List[int], back_numbers: List[int], periods: int = None, force_reload: bool = False) -> Dict[str, Any]:
-        """评价大乐透号码
+        self.lottery_type = 'dlt'
+        self.front_range, self.back_range = (1,35), (1,12)
+        self.front_count, self.back_count = 5, 2
 
-        Args:
-            front_numbers: 前区号码列表（5个）
-            back_numbers: 后区号码列表（2个）
-            periods: 分析期数（None表示使用全部数据）
-            force_reload: 是否强制重新加载历史数据
+    def evaluate(self, front_numbers, back_numbers, periods=DEFAULT_PERIODS, force_reload=False,
+                 config=None, snapshot=None, cancel_event=None,
+                 reference_config=DEFAULT_REFERENCE, reference_progress=None):
+        """Evaluate native fusion F; None periods explicitly selects all history."""
+        return self._evaluate_fusion((tuple(front_numbers), tuple(back_numbers)), periods, force_reload,
+                                     config, snapshot, cancel_event, reference_config, reference_progress)
 
-        Returns:
-            评价结果字典
-        """
-        # 加载历史数据
-        history_data = self.load_history(force_reload=force_reload)
-
-        # 如果未指定期数，使用全部数据；否则使用指定期数
-        if periods is None:
-            periods = len(history_data)
-        else:
-            periods = min(periods, len(history_data))
-
-        # 1. 频率分析
-        freq_result = self._analyze_frequency(front_numbers, back_numbers, history_data, periods)
-
-        # 2. 遗漏分析
-        missing_result = self._analyze_missing(front_numbers, back_numbers, history_data)
-
-        # 3. 模式分析
-        pattern_result = self._analyze_patterns(front_numbers, back_numbers)
-
-        # 4. 历史对比
-        historical_result = self._check_historical(front_numbers, back_numbers, history_data)
-
-        # 5. 计算得分
-        scores = self._calculate_scores(freq_result, missing_result, pattern_result, historical_result)
-
-        # 6. 生成建议
-        suggestions = self._generate_suggestions(freq_result, missing_result, pattern_result, historical_result)
-
-        return {
-            'frequency': freq_result,
-            'missing': missing_result,
-            'pattern': pattern_result,
-            'historical': historical_result,
-            'scores': scores,
-            'total_score': scores['total'],
-            'rating': scores['rating'],
-            'stars': scores['stars'],
-            'suggestions': suggestions
-        }
-    
     def _analyze_frequency(self, front_numbers: List[int], back_numbers: List[int], 
                           history_data: List[Dict], periods: int = 100) -> Dict:
         """频率分析
@@ -134,13 +85,24 @@ class DLTNumberEvaluator(BaseNumberEvaluator):
                 'classification': classification,
                 'icon': icon
             })
-        
+
+        # 统计所有号码频率（用于完整显示）
+        all_front_freqs = {}
+        for num in range(self.front_range[0], self.front_range[1] + 1):
+            all_front_freqs[num] = front_counter.get(num, 0)
+
+        all_back_freqs = {}
+        for num in range(self.back_range[0], self.back_range[1] + 1):
+            all_back_freqs[num] = back_counter.get(num, 0)
+
         return {
             'periods': periods,
             'front_details': front_freq_details,
             'back_details': back_freq_details,
             'front_theory': front_theory,
-            'back_theory': back_theory
+            'back_theory': back_theory,
+            'all_front_frequencies': all_front_freqs,
+            'all_back_frequencies': all_back_freqs
         }
     
     def _analyze_missing(self, front_numbers: List[int], back_numbers: List[int], 
@@ -156,8 +118,8 @@ class DLTNumberEvaluator(BaseNumberEvaluator):
             遗漏分析结果
         """
         # 计算所有号码的遗漏期数
-        front_missing = {i: 0 for i in range(1, 36)}
-        back_missing = {i: 0 for i in range(1, 13)}
+        front_missing = {i: len(history_data) for i in range(1, 36)}
+        back_missing = {i: len(history_data) for i in range(1, 13)}
         
         # 从最新一期开始，计算每个号码的遗漏期数
         for num in range(1, 36):
@@ -411,8 +373,7 @@ class DLTNumberEvaluator(BaseNumberEvaluator):
             # 检查完全匹配
             if draw_front_set == front_set and draw_back_set == back_set:
                 exact_match = True
-                exact_match_period = draw['draw_num']
-                break
+                exact_match_period = exact_match_period or draw['draw_num']
             
             # 统计前区匹配数
             front_match = len(front_set & draw_front_set)
@@ -454,42 +415,6 @@ class DLTNumberEvaluator(BaseNumberEvaluator):
             'rating': rating,
             'icon': icon
         }
-    
-    def _calculate_scores(self, freq_result: Dict, missing_result: Dict, 
-                         pattern_result: Dict, historical_result: Dict) -> Dict:
-        """计算各维度得分"""
-        # 1. 频率得分
-        front_freqs = [detail['frequency'] for detail in freq_result['front_details']]
-        avg_front_freq = np.mean(front_freqs)
-        freq_score = min(100, (avg_front_freq / freq_result['front_theory']) * 50 + 50)
-        
-        # 2. 遗漏得分
-        front_missings = [detail['missing'] for detail in missing_result['front_details']]
-        avg_front_missing = np.mean(front_missings)
-        missing_score = max(0, min(100, 100 - avg_front_missing * 2))
-        
-        # 3. 模式得分
-        pattern_score = 0
-        front_pattern = pattern_result['front']
-        
-        if front_pattern['odd_even']['icon'] in ['✅', '✓']:
-            pattern_score += 15
-        if front_pattern['big_small']['icon'] in ['✅', '✓']:
-            pattern_score += 15
-        if front_pattern['zone']['icon'] in ['✅', '✓']:
-            pattern_score += 20
-        if front_pattern['sum']['icon'] in ['✅', '✓']:
-            pattern_score += 20
-        if front_pattern['ac_value']['icon'] in ['✅', '✓']:
-            pattern_score += 15
-        if pattern_result['back']['odd_even']['icon'] in ['✅', '✓']:
-            pattern_score += 15
-        
-        # 4. 独特性得分
-        uniqueness_score = max(0, 100 - historical_result['max_total_match'] * 12)
-        
-        # 5. 综合得分
-        return self.calculate_composite_score(freq_score, missing_score, pattern_score, uniqueness_score)
     
     def _generate_suggestions(self, freq_result: Dict, missing_result: Dict, 
                              pattern_result: Dict, historical_result: Dict) -> List[str]:
